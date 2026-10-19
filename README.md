@@ -49,7 +49,7 @@ On localhost the site talks to the local worker (`js/config.js`).
 cd worker && npx wrangler login && npm run deploy
 ```
 
-Put the printed `*.workers.dev` URL into `js/config.js`, commit, push to `main`; GitHub Pages serves the repository root.
+Put the printed `*.workers.dev` URL into `js/config.js`, run `npm run stamp` (adds `?v=` to every script, style and import so the APTV browser does not keep old files), commit, push to `main`; GitHub Pages serves the repository root.
 
 ## Open in APTV
 

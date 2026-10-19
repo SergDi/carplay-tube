@@ -1,8 +1,8 @@
-import { api } from './api.js';
-import { store } from './store.js';
-import { DIRECTIONS, moveFocus } from './nav.js';
-import * as player from './player.js';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js';
+import { api } from './api.js?v=1e82deb-mvftk2yj';
+import { store } from './store.js?v=1e82deb-mvftk2yj';
+import { DIRECTIONS, moveFocus } from './nav.js?v=1e82deb-mvftk2yj';
+import * as player from './player.js?v=1e82deb-mvftk2yj';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=1e82deb-mvftk2yj';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
