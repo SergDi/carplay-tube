@@ -1,6 +1,6 @@
 import { Innertube, ClientType, Mixins, YTNodes } from 'youtubei.js/cf-worker';
 import { toCards, parseChannelRss, filterLocalSubs, LOCAL_SUB_FILTERS } from './cards.js';
-import { homeView, subscriptionsView, subscribedChannels, shelves } from './tv.js';
+import { homeView, subscriptionsView, subscribedChannels, shelves, sectionNext, shelfPage, mergeShelves } from './tv.js';
 
 // Stateless bridge between the CarPlay site and YouTube.
 // Signed-in viewers sign in the way a TV does (code on google.com/device); their
@@ -65,6 +65,35 @@ async function tvBrowse(ctx, browseId) {
   return res.data;
 }
 
+const PAGES = 3; // pages of shelves; the TV app loads them as you scroll down
+const MAX_SHELF_EXTENSIONS = 12;
+
+// The TV surface hands out ~4 shelves of 5 tiles at a time. Collect a few pages
+// and one more stretch of every shelf so a screen has enough to walk through.
+async function tvShelves(ctx, browseId) {
+  const yt = await tv(ctx);
+  const browse = async (params) => (await yt.actions.execute('/browse', { ...params, client: 'TV' })).data;
+  let page = await browse({ browseId });
+  const first = page;
+  const list = shelves(page);
+  for (let i = 1; i < PAGES; i++) {
+    const token = sectionNext(page);
+    if (!token) break;
+    page = await browse({ continuation: token });
+    list.push(...shelves(page));
+  }
+  await Promise.all(
+    list.filter((s) => s.next).slice(0, MAX_SHELF_EXTENSIONS).map(async (s) => {
+      try {
+        s.cards.push(...shelfPage(await browse({ continuation: s.next })).cards);
+      } catch {
+        // A shelf that fails to extend keeps its first tiles.
+      }
+    }),
+  );
+  return { first, list };
+}
+
 // ---------- sign-in (device flow) ----------
 
 const TOKEN_URL = 'https://www.youtube.com/o/oauth2/token';
@@ -117,21 +146,22 @@ async function authPoll(request) {
 // ---------- feeds ----------
 
 async function homeFeed(ctx, url) {
-  const data = await tvBrowse(ctx, 'FEwhat_to_watch');
-  return { ...homeView(data, url.searchParams.get('chip')), shelves: shelves(data).filter((s) => s.title) };
+  const list = mergeShelves((await tvShelves(ctx, 'FEwhat_to_watch')).list);
+  return { ...homeView(list, url.searchParams.get('chip')), shelves: list.filter((s) => s.title) };
 }
 
 async function subscriptionsFeed(ctx, url) {
-  const data = await tvBrowse(ctx, 'FEsubscriptions');
+  const { list } = await tvShelves(ctx, 'FEsubscriptions');
   // The TV page splits fresh uploads into small untitled shelves; show them as one row.
   const rows = [];
   let fresh = null;
-  for (const s of shelves(data)) {
+  for (const s of list) {
     if (s.title) rows.push(s);
     else if (fresh) fresh.cards.push(...s.cards);
     else rows.push((fresh = { title: 'Новые видео', cards: [...s.cards] }));
   }
-  return { ...subscriptionsView(data, url.searchParams.get('chip')), shelves: rows };
+  const merged = mergeShelves(rows);
+  return { ...subscriptionsView(merged, url.searchParams.get('chip')), shelves: merged };
 }
 
 async function myChannels(ctx) {

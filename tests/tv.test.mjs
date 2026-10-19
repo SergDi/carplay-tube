@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tileToCard, homeView, subscriptionsView, subscribedChannels } from '../worker/src/tv.js';
+import { tileToCard, homeView, subscriptionsView, subscribedChannels, shelves, mergeShelves } from '../worker/src/tv.js';
 
 const video = (id, extra = {}) => ({
   tileRenderer: {
@@ -71,14 +71,14 @@ test('Shorts tile takes its title from the thumbnail overlay', () => {
 });
 
 test('home: titled shelves become filters, «Все» dedupes', () => {
-  const all = homeView(page, '');
+  const all = homeView(shelves(page), '');
   assert.deepEqual(all.chips.map((c) => c.title), ['Все', 'Рекомендованные', 'Shorts']);
   assert.equal(all.items.length, 3);
-  assert.deepEqual(homeView(page, '1').items.map((c) => c.id), ['sssssssssss']);
+  assert.deepEqual(homeView(shelves(page), '1').items.map((c) => c.id), ['sssssssssss']);
 });
 
 test('subscriptions filters', () => {
-  const ids = (chip) => subscriptionsView(page, chip).items.map((c) => c.id);
+  const ids = (chip) => subscriptionsView(shelves(page), chip).items.map((c) => c.id);
   assert.deepEqual(ids('Shorts'), ['sssssssssss']);
   assert.deepEqual(ids('Трансляции'), ['lllllllllll']);
   assert.deepEqual(ids('Продолжить просмотр'), ['bbbbbbbbbbb']);
@@ -97,4 +97,13 @@ test('channel id is read from the tab params', () => {
   assert.deepEqual(subscribedChannels(tabs), [
     { id: 'UCXx3yVx9paWJ-BLZVqQ8CRQ', name: 'Історія', avatar: 'https://yt3.googleusercontent.com/a=s48' },
   ]);
+});
+
+test('shelves with the same title from later pages merge without repeats', () => {
+  const merged = mergeShelves([
+    { title: 'Shorts', cards: [{ id: 'a' }, { id: 'b' }] },
+    { title: '', cards: [{ id: 'c' }] },
+    { title: 'Shorts', cards: [{ id: 'b' }, { id: 'd' }] },
+  ]);
+  assert.deepEqual(merged.map((s) => [s.title, s.cards.map((c) => c.id)]), [['Shorts', ['a', 'b', 'd']], ['', ['c']]]);
 });

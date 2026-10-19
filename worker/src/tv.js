@@ -49,11 +49,27 @@ export function tileToCard(tile) {
   };
 }
 
+const nextToken = (continuations) => continuations?.[0]?.nextContinuationData?.continuation ?? null;
+
+// next: token for more tiles of the same shelf (horizontal continuation).
 export function shelves(data) {
   return walk(data, 'shelfRenderer').map((shelf) => ({
     title: text(walk(shelf.headerRenderer ?? {}, 'title')[0]),
     cards: walk(shelf, 'tileRenderer').map(tileToCard).filter(Boolean),
+    next: nextToken(shelf.content?.horizontalListRenderer?.continuations),
   })).filter((s) => s.cards.length);
+}
+
+// Token for the next page of shelves, on the first page or on a continuation page.
+export function sectionNext(data) {
+  const list = walk(data, 'sectionListRenderer')[0] ?? data.continuationContents?.sectionListContinuation;
+  return nextToken(list?.continuations);
+}
+
+// A horizontal continuation page: more tiles for one shelf.
+export function shelfPage(data) {
+  const list = data.continuationContents?.horizontalListContinuation ?? {};
+  return { cards: walk(list.items ?? [], 'tileRenderer').map(tileToCard).filter(Boolean), next: nextToken(list.continuations) };
 }
 
 function dedupe(cards) {
@@ -61,9 +77,25 @@ function dedupe(cards) {
   return cards.filter((c) => !seen.has(c.id) && seen.add(c.id));
 }
 
+// Shelves with the same title on later pages continue the earlier one.
+export function mergeShelves(list) {
+  const out = [];
+  const byTitle = new Map();
+  for (const s of list) {
+    const known = s.title && byTitle.get(s.title);
+    if (known) known.cards = dedupe([...known.cards, ...s.cards]);
+    else {
+      const copy = { title: s.title, cards: dedupe(s.cards) };
+      out.push(copy);
+      if (s.title) byTitle.set(s.title, copy);
+    }
+  }
+  return out;
+}
+
 // Home: every titled shelf becomes a filter; «Все» mixes them in page order.
-export function homeView(data, chip) {
-  const list = shelves(data).filter((s) => s.title);
+export function homeView(all, chip) {
+  const list = all.filter((s) => s.title);
   const index = chip === '' || chip == null ? -1 : Number(chip);
   const picked = list[index];
   return {
@@ -84,9 +116,9 @@ const SUB_RULES = {
   'Продолжить просмотр': (c) => c.progress > 0 && c.progress < 95,
 };
 
-export function subscriptionsView(data, chip) {
+export function subscriptionsView(list, chip) {
   const filter = SUB_FILTERS.includes(chip) ? chip : 'Все';
-  const all = dedupe(shelves(data).flatMap((s) => s.cards));
+  const all = dedupe(list.flatMap((s) => s.cards));
   return {
     chips: SUB_FILTERS.map((title) => ({ title, value: title === 'Все' ? '' : title, selected: title === filter })),
     items: SUB_RULES[filter] ? all.filter(SUB_RULES[filter]) : all,
