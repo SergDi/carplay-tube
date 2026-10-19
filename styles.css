@@ -222,6 +222,38 @@ button {
   font-weight: 600;
 }
 
+.watched {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--accent);
+}
+
+/* ---------- TV view: shelves as rows ---------- */
+
+.rows { display: grid; gap: 18px; }
+
+.row h3 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.row-track {
+  display: flex;
+  gap: 16px;
+  margin: 0 -20px;
+  padding: 6px 20px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-padding: 0 20px;
+}
+
+.row-track::-webkit-scrollbar { display: none; }
+.row-track .card { flex: 0 0 240px; }
+.row-track .card.short { flex-basis: 135px; }
+.row-track .card.short .thumb { aspect-ratio: 9 / 16; }
+
 /* ---------- search & settings ---------- */
 
 .search {
@@ -285,6 +317,23 @@ textarea {
 }
 
 .channel-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.device-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 24px;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.device-url { font-size: 22px; }
+
+.code {
+  font: 700 40px/1 ui-monospace, Menlo, monospace;
+  letter-spacing: 0.08em;
+}
 
 .probe {
   padding: 16px;
@@ -389,12 +438,17 @@ textarea {
 .pbtn[data-state="playing"] .i-play, .pbtn[data-state="paused"] .i-pause { display: none; }
 
 #p-sound { background: var(--accent); }
-#p-time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+#p-top { padding-right: 150px; }
+#p-time { position: absolute; top: 20px; right: 28px; color: var(--muted); font-size: 20px; font-variant-numeric: tabular-nums; }
 
 /* Short CarPlay screens: compact labels, keep targets large. */
+@media (max-width: 900px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 14px; }
+  .title { font-size: 16px; }
+}
+
 @media (max-height: 520px) {
   #main { padding-top: 12px; }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px 14px; }
   .pbtn span { display: none; }
   .pbtn.primary span, #p-sound span, #p-back span { display: inline; }
   #rail button span { font-size: 12px; }
@@ -403,7 +457,7 @@ textarea {
 #toast {
   position: fixed;
   left: 50%;
-  bottom: 24px;
+  top: 16px;
   z-index: 20;
   transform: translateX(-50%);
   padding: 12px 20px;

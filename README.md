@@ -3,14 +3,20 @@
 YouTube for the APTV browser on CarPlay: cards you walk with the knob, Enter opens a full-screen video, «Назад» returns to the same card.
 
 - `index.html`, `styles.css`, `js/` — the site, served by GitHub Pages as is (no build).
-- `worker/` — Cloudflare Worker that asks YouTube for the feeds (youtubei.js). Stateless: a viewer's sign-in cookie arrives per request in `X-YT-Cookie` and is never stored.
+- `worker/` — Cloudflare Worker that asks YouTube for the feeds (youtubei.js). Stateless: a viewer's sign-in tokens arrive per request in `X-YT-Auth` and are never stored; a renewed access token comes back in `X-YT-Auth-Update`.
 
 ## What works without signing in
 
 - Search with YouTube's own filters.
 - «Подписки» from channels added in Settings (channel RSS), filters Все / Сегодня / Видео / Shorts.
 
-With a cookie from youtube.com (Settings → «Вход в YouTube») the Home feed with its chips and the real Subscriptions feed with its filters come from the account.
+## Signing in
+
+Settings → «Войти» signs in the way a YouTube TV app does: the site shows a code, the viewer enters it at google.com/device on the phone. The tokens stay in that browser's storage. Signed in, Home and Subscriptions come from the YouTube TV surface (`FEwhat_to_watch`, `FEsubscriptions`), which works with these tokens; the web surface does not.
+
+- Home: every shelf (Рекомендованные, Недавно опубликованные, Shorts…) is a filter.
+- Subscriptions: Все / Видео / Shorts / Трансляции / Продолжить просмотр.
+- Settings → «Вид»: «Телефон» shows filters and a grid, «TV» shows the shelves as rows.
 
 ## Controls
 

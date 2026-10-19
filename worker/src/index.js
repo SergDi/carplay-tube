@@ -1,13 +1,16 @@
-import { Innertube, Mixins, YTNodes } from 'youtubei.js/cf-worker';
+import { Innertube, ClientType, Mixins, YTNodes } from 'youtubei.js/cf-worker';
 import { toCards, parseChannelRss, filterLocalSubs, LOCAL_SUB_FILTERS } from './cards.js';
+import { homeView, subscriptionsView, subscribedChannels, shelves } from './tv.js';
 
-// Stateless bridge between the CarPlay site and YouTube's InnerTube API.
-// A viewer's sign-in arrives per request in X-YT-Cookie and is never stored or logged.
+// Stateless bridge between the CarPlay site and YouTube.
+// Signed-in viewers sign in the way a TV does (code on google.com/device); their
+// tokens live on their device and arrive per request in X-YT-Auth. Nothing is stored.
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-YT-Cookie',
+  'Access-Control-Allow-Headers': 'Content-Type, X-YT-Auth',
+  'Access-Control-Expose-Headers': 'X-YT-Auth-Update',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -24,13 +27,109 @@ class HttpError extends Error {
   }
 }
 
-async function client(cookie) {
-  return Innertube.create({
-    retrieve_player: false,
-    lang: 'ru',
-    location: 'UA',
-    ...(cookie ? { cookie } : {}),
+const BASE = { retrieve_player: false, lang: 'ru', location: 'UA' };
+
+const web = () => Innertube.create(BASE);
+
+const encodeTokens = (t) => btoa(JSON.stringify(t));
+
+function decodeTokens(header) {
+  if (!header) return null;
+  try {
+    const t = JSON.parse(atob(header));
+    return t.access_token && t.refresh_token && t.client ? t : null;
+  } catch {
+    return null;
+  }
+}
+
+// Signed-in TV session. `refreshed` is set when the access token had to be renewed,
+// so the site can keep the new one.
+async function tv(ctx) {
+  if (!ctx.tokens) throw new HttpError(401, 'Нужен вход в YouTube');
+  const yt = await Innertube.create({ ...BASE, client_type: ClientType.TV });
+  const before = ctx.tokens.access_token;
+  try {
+    await yt.session.signIn({ ...ctx.tokens });
+  } catch {
+    throw new HttpError(401, 'Вход устарел — войди заново в настройках');
+  }
+  const now = yt.session.oauth.oauth2_tokens;
+  if (now && now.access_token !== before) ctx.refreshed = { ...now, client: ctx.tokens.client };
+  return yt;
+}
+
+async function tvBrowse(ctx, browseId) {
+  const yt = await tv(ctx);
+  const res = await yt.actions.execute('/browse', { browseId, client: 'TV' });
+  return res.data;
+}
+
+// ---------- sign-in (device flow) ----------
+
+const TOKEN_URL = 'https://www.youtube.com/o/oauth2/token';
+
+async function authStart() {
+  const yt = await web();
+  const oauth = yt.session.oauth;
+  oauth.client_id = await oauth.getClientID();
+  const code = await oauth.getDeviceAndUserCode();
+  return {
+    user_code: code.user_code,
+    verification_url: code.verification_url,
+    device_code: code.device_code,
+    interval: code.interval,
+    expires_in: code.expires_in,
+    client: oauth.client_id,
+  };
+}
+
+async function authPoll(request) {
+  const { device_code, client } = await request.json().catch(() => ({}));
+  if (!device_code || !client?.client_id) throw new HttpError(400, 'Нет кода входа');
+  const res = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: client.client_id,
+      client_secret: client.client_secret,
+      code: device_code,
+      grant_type: 'http://oauth.net/grant_type/device/1.0',
+    }),
   });
+  const data = await res.json().catch(() => ({}));
+  if (data.error === 'authorization_pending' || data.error === 'slow_down') return { pending: true };
+  if (data.error === 'access_denied') throw new HttpError(403, 'Вход отклонён');
+  if (data.error === 'expired_token') throw new HttpError(410, 'Код устарел — начни вход заново');
+  if (data.error || !data.access_token) throw new HttpError(502, 'Google не выдал вход');
+  return {
+    tokens: {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      token_type: data.token_type,
+      scope: data.scope,
+      expiry_date: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+      client,
+    },
+  };
+}
+
+// ---------- feeds ----------
+
+async function homeFeed(ctx, url) {
+  const data = await tvBrowse(ctx, 'FEwhat_to_watch');
+  return { ...homeView(data, url.searchParams.get('chip')), shelves: shelves(data).filter((s) => s.title) };
+}
+
+async function subscriptionsFeed(ctx, url) {
+  const data = await tvBrowse(ctx, 'FEsubscriptions');
+  // Per-channel shelves on the TV page have no header; name them after the channel.
+  const rows = shelves(data).map((s) => ({ ...s, title: s.title || s.cards[0]?.channel || '' }));
+  return { ...subscriptionsView(data, url.searchParams.get('chip')), shelves: rows };
+}
+
+async function myChannels(ctx) {
+  return { channels: subscribedChannels(await tvBrowse(ctx, 'FEsubscriptions')) };
 }
 
 function chipsOf(feed) {
@@ -39,47 +138,26 @@ function chipsOf(feed) {
   return nodes.filter((n) => n.text && n.endpoint);
 }
 
-// Filters are addressed by index into the list the base feed returned, so the
-// site never has to hold YouTube's opaque continuation tokens.
-async function applyChip(yt, feed, index) {
-  const chips = chipsOf(feed);
+// Search filters are addressed by index into the list the base search returned,
+// so the site never holds YouTube's opaque continuation tokens.
+async function applyChip(yt, feed, raw) {
+  const index = raw == null || raw === '' ? null : Number(raw);
+  const chips = chipsOf(feed).filter((c) => c.text !== 'Все');
   const active = index != null && chips[index] ? index : null;
   const titles = [
     { title: 'Все', value: '', selected: active == null },
-    ...chips.filter((c) => c.text !== 'Все').map((c, i) => ({ title: c.text, value: String(i), selected: i === active })),
+    ...chips.map((c, i) => ({ title: c.text, value: String(i), selected: i === active })),
   ];
   if (active == null) return { chips: titles, feed };
   const response = await chips[active].endpoint.call(yt.actions, { parse: true });
   return { chips: titles, feed: new Mixins.Feed(yt.actions, response, true) };
 }
 
-const chipIndex = (url) => {
-  const raw = url.searchParams.get('chip');
-  return raw == null || raw === '' ? null : Number(raw);
-};
-
-async function homeFeed(url, cookie) {
-  if (!cookie) return { loggedIn: false, chips: [], items: [] };
-  const yt = await client(cookie);
-  const home = await yt.getHomeFeed();
-  const index = chipIndex(url);
-  const titles = home.filters.map((title, i) => ({ title, value: i ? String(i) : '', selected: i === (index ?? 0) }));
-  const feed = index ? await home.applyFilter(home.filters[index]) : home;
-  return { loggedIn: true, chips: titles, items: toCards(feed.videos) };
-}
-
-async function subscriptionsFeed(url, cookie) {
-  if (!cookie) throw new HttpError(401, 'Нужен вход в YouTube');
-  const yt = await client(cookie);
-  const { chips, feed } = await applyChip(yt, await yt.getSubscriptionsFeed(), chipIndex(url));
-  return { loggedIn: true, chips, items: toCards(feed.videos) };
-}
-
-async function search(url, cookie) {
+async function search(url) {
   const q = (url.searchParams.get('q') ?? '').trim();
   if (!q) throw new HttpError(400, 'Пустой запрос');
-  const yt = await client(cookie);
-  const { chips, feed } = await applyChip(yt, await yt.search(q), chipIndex(url));
+  const yt = await web();
+  const { chips, feed } = await applyChip(yt, await yt.search(q), url.searchParams.get('chip'));
   return { chips, items: toCards(feed.videos) };
 }
 
@@ -89,12 +167,11 @@ const CHANNEL_TABS = {
   'Трансляции': (ch) => ch.getLiveStreams(),
 };
 
-async function channel(url, cookie) {
+async function channel(url) {
   const id = url.searchParams.get('id') ?? '';
   if (!/^UC[\w-]{22}$/.test(id)) throw new HttpError(400, 'Неверный канал');
   const tab = CHANNEL_TABS[url.searchParams.get('tab')] ? url.searchParams.get('tab') : 'Видео';
-  const yt = await client(cookie);
-  const ch = await yt.getChannel(id);
+  const ch = await (await web()).getChannel(id);
   const available = Object.keys(CHANNEL_TABS).filter((t) => ch.tabs.includes(t));
   const feed = await CHANNEL_TABS[tab](ch);
   return {
@@ -105,12 +182,14 @@ async function channel(url, cookie) {
   };
 }
 
+const absolute = (u) => (u.startsWith('//') ? `https:${u}` : u);
+
 function channelInfo(node) {
   if (node.type === 'Channel' || node.type === 'GridChannel') {
     return {
       id: node.id ?? node.author?.id,
       name: node.author?.name ?? String(node.title ?? ''),
-      avatar: node.author?.best_thumbnail?.url ?? '',
+      avatar: absolute(node.author?.best_thumbnail?.url ?? ''),
       meta: String(node.subscriber_count ?? node.video_count ?? ''),
     };
   }
@@ -118,35 +197,21 @@ function channelInfo(node) {
     return {
       id: node.content_id,
       name: String(node.metadata?.title ?? ''),
-      avatar: node.content_image?.image?.[0]?.url ?? '',
+      avatar: absolute(node.content_image?.image?.[0]?.url ?? ''),
       meta: '',
     };
   }
   return null;
 }
 
-const absolute = (u) => (u.startsWith('//') ? `https:${u}` : u);
-
-function channelList(nodes) {
-  return nodes
-    .map(channelInfo)
-    .filter((c) => c && /^UC[\w-]{22}$/.test(c.id))
-    .map((c) => ({ ...c, avatar: absolute(c.avatar) }));
-}
-
 async function channelSearch(url) {
   const q = (url.searchParams.get('q') ?? '').trim();
   if (!q) throw new HttpError(400, 'Пустой запрос');
-  const yt = await client();
-  const res = await yt.search(q, { type: 'channel' });
-  return { channels: channelList([...res.channels, ...res.memo.getType(YTNodes.LockupView)]) };
-}
-
-async function myChannels(cookie) {
-  if (!cookie) throw new HttpError(401, 'Нужен вход в YouTube');
-  const yt = await client(cookie);
-  const feed = await yt.getChannelsFeed();
-  return { channels: channelList(feed.channels) };
+  const res = await (await web()).search(q, { type: 'channel' });
+  const channels = [...res.channels, ...res.memo.getType(YTNodes.LockupView)]
+    .map(channelInfo)
+    .filter((c) => c && /^UC[\w-]{22}$/.test(c.id));
+  return { channels };
 }
 
 const MAX_LOCAL_CHANNELS = 40;
@@ -170,13 +235,15 @@ async function localSubscriptions(request) {
 }
 
 const ROUTES = {
-  'GET /api/home': (_req, url, cookie) => homeFeed(url, cookie),
-  'GET /api/subscriptions': (_req, url, cookie) => subscriptionsFeed(url, cookie),
-  'GET /api/search': (_req, url, cookie) => search(url, cookie),
-  'GET /api/channel': (_req, url, cookie) => channel(url, cookie),
-  'GET /api/channel-search': (_req, url) => channelSearch(url),
-  'GET /api/my-channels': (_req, _url, cookie) => myChannels(cookie),
-  'POST /api/local-subscriptions': (req) => localSubscriptions(req),
+  'POST /api/auth/start': () => authStart(),
+  'POST /api/auth/poll': (ctx) => authPoll(ctx.request),
+  'GET /api/home': (ctx) => homeFeed(ctx, ctx.url),
+  'GET /api/subscriptions': (ctx) => subscriptionsFeed(ctx, ctx.url),
+  'GET /api/my-channels': (ctx) => myChannels(ctx),
+  'GET /api/search': (ctx) => search(ctx.url),
+  'GET /api/channel': (ctx) => channel(ctx.url),
+  'GET /api/channel-search': (ctx) => channelSearch(ctx.url),
+  'POST /api/local-subscriptions': (ctx) => localSubscriptions(ctx.request),
 };
 
 export default {
@@ -185,11 +252,12 @@ export default {
     const url = new URL(request.url);
     const route = ROUTES[`${request.method} ${url.pathname}`];
     if (!route) return json({ error: 'Не найдено' }, 404);
-    const cookie = request.headers.get('X-YT-Cookie')?.trim() || '';
+    const ctx = { request, url, tokens: decodeTokens(request.headers.get('X-YT-Auth')), refreshed: null };
     try {
-      const body = await route(request, url, cookie);
-      // Personal answers must never sit in a shared cache.
-      return json(body, 200, { 'Cache-Control': cookie ? 'private, no-store' : 'public, max-age=300' });
+      const body = await route(ctx);
+      const headers = { 'Cache-Control': ctx.tokens || url.pathname.startsWith('/api/auth') ? 'private, no-store' : 'public, max-age=300' };
+      if (ctx.refreshed) headers['X-YT-Auth-Update'] = encodeTokens(ctx.refreshed);
+      return json(body, 200, headers);
     } catch (e) {
       const status = e instanceof HttpError ? e.status : 502;
       return json({ error: e instanceof HttpError ? e.message : 'YouTube не ответил', detail: String(e?.message ?? e) }, status);

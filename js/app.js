@@ -10,18 +10,23 @@ const el = (tag, props = {}, ...children) => {
   return node;
 };
 
-const TABS = {
-  home: 'Главная',
-  subs: 'Подписки',
-  search: 'Поиск',
-  settings: 'Настройки',
-};
+const TABS = ['home', 'subs', 'search', 'settings'];
 
-let tab = TABS[store.get().tab] ? store.get().tab : 'home';
+let tab = TABS.includes(store.get().tab) ? store.get().tab : 'home';
 const chipByTab = { home: '', subs: '', search: '' };
 let query = '';
 let request = 0; // guards against a slow answer landing on a newer screen
 let returnFocus = null;
+let signIn = null; // pending device-code sign-in: {user_code, verification_url, timer}
+
+const signedIn = () => Boolean(store.get().auth);
+
+// Re-rendering replaces the focused button; controls with a data-key get focus back.
+function keepFocus(render) {
+  const key = document.activeElement?.dataset?.key;
+  render();
+  if (key) document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus();
+}
 
 // ---------- rail ----------
 
@@ -44,14 +49,16 @@ $('rail').addEventListener('click', (e) => {
 function cardNode(card) {
   const btn = el(
     'button',
-    { className: 'card', type: 'button' },
+    { className: `card${card.short ? ' short' : ''}`, type: 'button' },
     el(
       'span',
       { className: 'thumb' },
       el('img', { src: card.thumb, alt: '', loading: 'lazy', decoding: 'async' }),
       card.live ? el('span', { className: 'badge live', textContent: 'В эфире' }) : null,
-      card.short ? el('span', { className: 'badge', textContent: 'Shorts' }) : null,
+      card.upcoming ? el('span', { className: 'badge', textContent: 'Скоро' }) : null,
+      card.short && !card.duration ? el('span', { className: 'badge', textContent: 'Shorts' }) : null,
       card.duration ? el('span', { className: 'badge', textContent: card.duration }) : null,
+      card.progress ? el('span', { className: 'watched', style: `width:${card.progress}%` }) : null,
     ),
     el('span', { className: 'title', textContent: card.title }),
     el('span', { className: 'meta', textContent: [card.channel, card.meta].filter(Boolean).join(' · ') }),
@@ -65,12 +72,28 @@ function renderChips(chips, onPick) {
   bar.replaceChildren(
     ...chips.map((c) => {
       const b = el('button', { type: 'button', className: 'chip', textContent: c.title });
+      b.dataset.key = `chip:${c.title}`;
       b.setAttribute('aria-pressed', String(c.selected));
       b.onclick = () => onPick(c.value ?? '');
       return b;
     }),
   );
   bar.hidden = chips.length === 0;
+}
+
+function rows(shelves) {
+  return el(
+    'div',
+    { className: 'rows' },
+    ...shelves.map((s) =>
+      el(
+        'section',
+        { className: 'row' },
+        el('h3', { textContent: s.title }),
+        el('div', { className: 'row-track' }, ...s.cards.map(cardNode)),
+      ),
+    ),
+  );
 }
 
 function message(title, text, ...actions) {
@@ -83,8 +106,9 @@ function message(title, text, ...actions) {
   );
 }
 
-const action = (label, fn) => {
+const action = (label, fn, key) => {
   const b = el('button', { type: 'button', className: 'btn', textContent: label });
+  if (key) b.dataset.key = key;
   b.onclick = fn;
   return b;
 };
@@ -97,38 +121,43 @@ const goTo = (next) => () => {
 };
 
 function skeleton() {
-  return el('div', { className: 'grid' }, ...Array.from({ length: 8 }, () => el('div', { className: 'card skeleton' })));
+  return el('div', { className: 'grid' }, ...Array.from({ length: 6 }, () => el('div', { className: 'card skeleton' })));
 }
 
-async function loadFeed(loader, { onChip, empty }) {
+async function loadFeed(loader, { onChip, empty, rowsAllowed = false }) {
   const id = ++request;
-  const keepChips = $('chips').querySelector('[aria-pressed="true"]') === document.activeElement;
+  const focusKey = document.activeElement?.closest('#chips') ? 'chip' : null;
   $('content').replaceChildren(skeleton());
   try {
     const data = await loader();
     if (id !== request) return;
-    renderChips(data.chips ?? [], onChip);
-    if (keepChips) $('chips').querySelector('[aria-pressed="true"]')?.focus();
+    const asRows = rowsAllowed && store.get().view === 'tv' && data.shelves?.length;
+    renderChips(asRows ? [] : data.chips ?? [], onChip);
+    if (focusKey) $('chips').querySelector('[aria-pressed="true"]')?.focus();
     const items = data.items ?? [];
     $('content').replaceChildren(
-      items.length ? el('div', { className: 'grid' }, ...items.map(cardNode)) : empty(),
+      asRows ? rows(data.shelves) : items.length ? el('div', { className: 'grid' }, ...items.map(cardNode)) : empty(),
     );
   } catch (err) {
     if (id !== request) return;
+    if (err.status === 401 && signedIn()) store.set({ auth: null });
     $('content').replaceChildren(
-      message('Не получилось загрузить', err.message, action('Повторить', () => loadFeed(loader, { onChip, empty }))),
+      message(
+        'Не получилось загрузить',
+        err.message,
+        action('Повторить', () => loadFeed(loader, { onChip, empty, rowsAllowed })),
+      ),
     );
   }
 }
 
 function showHome() {
-  const { cookie } = store.get();
-  if (!cookie) {
+  if (!signedIn()) {
     renderChips([], null);
     $('content').replaceChildren(
       message(
         'Главная появится после входа',
-        'Рекомендации YouTube показывает только по аккаунту. Подписки и поиск работают и без входа.',
+        'Рекомендации YouTube показывает только по аккаунту. Поиск и каналы из настроек работают и без входа.',
         action('Войти', goTo('settings')),
         action('Поиск', goTo('search')),
       ),
@@ -136,17 +165,18 @@ function showHome() {
     return;
   }
   loadFeed(() => api.home(chipByTab.home), {
+    rowsAllowed: true,
     onChip: (v) => {
       chipByTab.home = v;
       showHome();
     },
-    empty: () => message('Лента пуста', 'YouTube ничего не вернул. Возможно, вход устарел — обнови его в настройках.'),
+    empty: () => message('Лента пуста', 'YouTube ничего не вернул.'),
   });
 }
 
 function showSubs() {
-  const { cookie, channels } = store.get();
-  if (!cookie && channels.length === 0) {
+  const { channels } = store.get();
+  if (!signedIn() && channels.length === 0) {
     renderChips([], null);
     $('content').replaceChildren(
       message(
@@ -157,15 +187,16 @@ function showSubs() {
     );
     return;
   }
-  const loader = cookie
+  const loader = signedIn()
     ? () => api.subscriptions(chipByTab.subs)
     : () => api.localSubscriptions(channels.map((c) => c.id), chipByTab.subs || 'Все');
   loadFeed(loader, {
+    rowsAllowed: signedIn(),
     onChip: (v) => {
       chipByTab.subs = v;
       showSubs();
     },
-    empty: () => message('Здесь пусто', 'По этому фильтру новых видео нет.'),
+    empty: () => message('Здесь пусто', 'По этому фильтру видео нет.'),
   });
 }
 
@@ -192,26 +223,26 @@ function showSearch() {
     runSearch(true);
   };
   $('search-bar').replaceChildren(form);
-  $('search-bar').hidden = false;
-  if (query) runSearch(false);
-  else {
-    renderChips([], null);
-    const recent = store.get().recent;
-    $('content').replaceChildren(
-      recent.length
-        ? el(
-            'div',
-            { className: 'recent' },
-            el('p', { className: 'section-title', textContent: 'Недавние запросы' }),
-            el('div', { className: 'actions' }, ...recent.map((r) => action(r, () => {
-              query = r;
-              input.value = r;
-              runSearch(true);
-            }))),
-          )
-        : message('Поиск по YouTube', 'Набери запрос на клавиатуре экрана.'),
-    );
+  if (query) {
+    runSearch(false);
+    return;
   }
+  renderChips([], null);
+  const recent = store.get().recent;
+  $('content').replaceChildren(
+    recent.length
+      ? el(
+          'div',
+          { className: 'recent' },
+          el('p', { className: 'section-title', textContent: 'Недавние запросы' }),
+          el('div', { className: 'actions' }, ...recent.map((r) => action(r, () => {
+            query = r;
+            input.value = r;
+            runSearch(true);
+          }))),
+        )
+      : message('Поиск по YouTube', 'Набери запрос на клавиатуре экрана.'),
+  );
 }
 
 function runSearch(focusResults) {
@@ -226,42 +257,114 @@ function runSearch(focusResults) {
   });
 }
 
+// ---------- sign-in ----------
+
+function stopSignIn() {
+  if (signIn) clearTimeout(signIn.timer);
+  signIn = null;
+}
+
+async function startSignIn() {
+  stopSignIn();
+  try {
+    const code = await api.authStart();
+    signIn = { ...code, timer: 0 };
+    keepFocus(showSettings);
+    $('signin-cancel')?.focus();
+    const poll = async () => {
+      if (!signIn || signIn.device_code !== code.device_code) return;
+      try {
+        const res = await api.authPoll(code.device_code, code.client);
+        if (res.tokens) {
+          stopSignIn();
+          store.set({ auth: res.tokens });
+          toast('Вход выполнен');
+          chipByTab.home = '';
+          chipByTab.subs = '';
+          if (tab === 'settings') keepFocus(showSettings);
+          document.querySelector('[data-key="signout"]')?.focus();
+          return;
+        }
+        signIn.timer = setTimeout(poll, Math.max(code.interval, 3) * 1000);
+      } catch (err) {
+        stopSignIn();
+        toast(err.message);
+        if (tab === 'settings') keepFocus(showSettings);
+      }
+    };
+    signIn.timer = setTimeout(poll, Math.max(code.interval, 3) * 1000);
+  } catch (err) {
+    toast(err.message);
+  }
+}
+
+function signInSection() {
+  if (signIn) {
+    return el(
+      'section',
+      {},
+      el('h2', { textContent: 'Вход в YouTube' }),
+      el('p', { textContent: 'На телефоне открой адрес ниже, введи код и подтверди вход. Эта страница сама поймёт, что ты вошёл.' }),
+      el(
+        'div',
+        { className: 'device-code' },
+        el('span', { className: 'device-url', textContent: signIn.verification_url.replace(/^https?:\/\/(www\.)?/, '') }),
+        el('span', { className: 'code', textContent: signIn.user_code }),
+      ),
+      el('div', { className: 'actions' }, Object.assign(action('Отмена', () => {
+        stopSignIn();
+        keepFocus(showSettings);
+      }, 'signin'), { id: 'signin-cancel' })),
+    );
+  }
+  if (signedIn()) {
+    return el(
+      'section',
+      {},
+      el('h2', { textContent: 'Вход в YouTube' }),
+      el('p', { textContent: 'Ты вошёл. Главная и подписки берутся из твоего аккаунта.' }),
+      el('div', { className: 'actions' }, action('Выйти', () => {
+        store.set({ auth: null });
+        toast('Вход удалён с этого устройства');
+        keepFocus(showSettings);
+        document.querySelector('[data-key="signin"]')?.focus();
+      }, 'signout')),
+      el('p', { className: 'note', textContent: 'Доступ хранится только в этом браузере. Отозвать его совсем можно в настройках аккаунта Google → «Сторонние приложения».' }),
+    );
+  }
+  return el(
+    'section',
+    {},
+    el('h2', { textContent: 'Вход в YouTube' }),
+    el('p', { textContent: 'Как на телевизоре: сайт покажет код, ты введёшь его на телефоне. Нужен для главной и настоящих подписок.' }),
+    el('div', { className: 'actions' }, action('Войти', startSignIn, 'signin')),
+  );
+}
+
 // ---------- settings ----------
 
-function showSettings() {
-  renderChips([], null);
-  const { cookie, channels } = store.get();
+function viewSection() {
+  const { view } = store.get();
+  const option = (value, label) => {
+    const b = action(label, () => {
+      store.set({ view: value });
+      keepFocus(showSettings);
+    }, `view:${value}`);
+    b.classList.add('chip');
+    b.setAttribute('aria-pressed', String(view === value));
+    return b;
+  };
+  return el(
+    'section',
+    {},
+    el('h2', { textContent: 'Вид главной и подписок' }),
+    el('p', { textContent: view === 'tv' ? 'Полки рядами, как в YouTube на телевизоре.' : 'Фильтры сверху и сетка карточек, как в телефоне.' }),
+    el('div', { className: 'actions' }, option('phone', 'Телефон'), option('tv', 'TV')),
+  );
+}
 
-  const cookieBox = el('textarea', {
-    id: 'cookie',
-    rows: 3,
-    placeholder: 'Вставь сюда строку cookie с youtube.com',
-    value: cookie,
-    spellcheck: false,
-  });
-  const saveCookie = action(cookie ? 'Обновить вход' : 'Сохранить вход', () => {
-    const value = cookieBox.value.trim().replace(/^cookie:\s*/i, '');
-    if (!store.set({ cookie: value })) toast('Браузер не дал сохранить — проверь, не включён ли частный режим.');
-    else toast(value ? 'Вход сохранён на этом устройстве' : 'Вход удалён');
-    show();
-  });
-  const signOut = cookie ? action('Выйти', () => {
-    store.set({ cookie: '' });
-    toast('Вход удалён');
-    show();
-  }) : null;
-  const importBtn = cookie ? action('Забрать каналы из аккаунта', async () => {
-    try {
-      const { channels: mine } = await api.myChannels();
-      const known = new Set(store.get().channels.map((c) => c.id));
-      store.set({ channels: [...store.get().channels, ...mine.filter((c) => !known.has(c.id))] });
-      toast(`Каналов: ${store.get().channels.length}`);
-      show();
-    } catch (err) {
-      toast(err.message);
-    }
-  }) : null;
-
+function channelsSection() {
+  const { channels } = store.get();
   const channelInput = el('input', { type: 'search', placeholder: 'Название канала или @имя', autocomplete: 'off' });
   const found = el('div', { className: 'channel-list' });
   const channelForm = el('form', { className: 'search' }, channelInput, el('button', { className: 'btn', type: 'submit', textContent: 'Найти канал' }));
@@ -275,68 +378,65 @@ function showSettings() {
       found.replaceChildren(...list.slice(0, 6).map((c) => channelRow(c, 'Добавить', () => {
         if (!store.get().channels.some((x) => x.id === c.id)) store.set({ channels: [...store.get().channels, c] });
         toast(`Добавлен: ${c.name}`);
-        show();
-      })));
+        keepFocus(showSettings);
+      }, `remove:${c.id}`)));
       if (!list.length) found.replaceChildren(el('p', { textContent: 'Каналы не нашлись.' }));
+      found.querySelector('button')?.focus();
     } catch (err) {
       found.replaceChildren(el('p', { textContent: err.message }));
     }
   };
+  const importBtn = signedIn() ? action('Забрать все каналы из аккаунта', async () => {
+    try {
+      const { channels: mine } = await api.myChannels();
+      const known = new Set(store.get().channels.map((c) => c.id));
+      store.set({ channels: [...store.get().channels, ...mine.filter((c) => !known.has(c.id))] });
+      toast(`Каналов: ${store.get().channels.length}`);
+      keepFocus(showSettings);
+    } catch (err) {
+      toast(err.message);
+    }
+  }, 'import') : null;
+  return el(
+    'section',
+    {},
+    el('h2', { textContent: `Каналы без входа (${channels.length})` }),
+    el('p', { textContent: 'Их новые видео показываются в «Подписках», когда ты не вошёл.' }),
+    channelForm,
+    found,
+    importBtn ? el('div', { className: 'actions' }, importBtn) : null,
+    el('div', { className: 'channel-list' }, ...channels.map((c, i) => channelRow(c, 'Убрать', () => {
+      store.set({ channels: store.get().channels.filter((x) => x.id !== c.id) });
+      const next = channels[i + 1] ?? channels[i - 1];
+      keepFocus(showSettings);
+      document.querySelector(`[data-key="remove:${next?.id}"]`)?.focus();
+    }, `remove:${c.id}`))),
+  );
+}
 
-  const mine = channels.map((c) => channelRow(c, 'Убрать', () => {
-    store.set({ channels: store.get().channels.filter((x) => x.id !== c.id) });
-    show();
-  }));
-
-  const keyProbe = el('p', { id: 'key-probe', className: 'probe', textContent: 'Покрути или нажми шайбу — здесь появится, что получил сайт.' });
-
+function showSettings() {
+  renderChips([], null);
+  const keyProbe = el('p', { id: 'key-probe', className: 'probe', tabIndex: 0, textContent: 'Покрути или нажми шайбу — здесь появится, что получил сайт.' });
+  keyProbe.dataset.key = 'probe';
   $('content').replaceChildren(
     el(
       'div',
       { className: 'settings' },
-      el(
-        'section',
-        {},
-        el('h2', { textContent: 'Вход в YouTube' }),
-        el('p', { textContent: cookie ? 'Вход сохранён на этом устройстве. Главная и подписки берутся из твоего аккаунта.' : 'Нужен для главной и настоящих подписок. Делается один раз на телефоне.' }),
-        el(
-          'details',
-          {},
-          el('summary', { textContent: 'Где взять cookie' }),
-          el(
-            'ol',
-            {},
-            el('li', { textContent: 'На компьютере открой youtube.com, где ты уже вошёл.' }),
-            el('li', { textContent: 'Открой инструменты разработчика (⌥⌘I), вкладка Network, обнови страницу.' }),
-            el('li', { textContent: 'Кликни любой запрос к youtube.com, в Request Headers скопируй значение cookie целиком.' }),
-            el('li', { textContent: 'Вставь его сюда на iPhone (Mac и iPhone делят буфер обмена) и нажми «Сохранить вход».' }),
-          ),
-          el('p', { className: 'note', textContent: 'Cookie хранится только в этом браузере и отправляется лишь нашему серверу-посреднику, чтобы тот спросил YouTube от твоего имени. Сервер его не сохраняет. Кто получит cookie — получит доступ к аккаунту, никому его не пересылай.' }),
-        ),
-        cookieBox,
-        el('div', { className: 'actions' }, saveCookie, signOut, importBtn),
-      ),
-      el(
-        'section',
-        {},
-        el('h2', { textContent: `Каналы без входа (${channels.length})` }),
-        el('p', { textContent: 'Новые видео этих каналов показываются в «Подписках», пока ты не вошёл.' }),
-        channelForm,
-        found,
-        el('div', { className: 'channel-list' }, ...mine),
-      ),
+      signInSection(),
+      viewSection(),
       el('section', {}, el('h2', { textContent: 'Проверка шайбы' }), keyProbe),
+      channelsSection(),
     ),
   );
 }
 
-function channelRow(c, label, fn) {
+function channelRow(c, label, fn, key) {
   return el(
     'div',
     { className: 'channel' },
     c.avatar ? el('img', { src: c.avatar, alt: '', loading: 'lazy' }) : el('span', { className: 'avatar-stub' }),
     el('span', { className: 'channel-name', textContent: c.name }),
-    action(label, fn),
+    action(label, fn, key),
   );
 }
 
@@ -410,7 +510,7 @@ document.addEventListener(
       if (e.key === 'Escape') e.target.blur();
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
-        moveFocus(document.body, DIRECTIONS[e.key]);
+        moveFocus($('app'), DIRECTIONS[e.key]);
       }
       return;
     }
@@ -423,9 +523,10 @@ document.addEventListener(
   true,
 );
 
-// Keep the focused control on screen when the knob walks the grid.
+// Keep the focused control on screen when the knob walks the grid. Instant, not
+// smooth: the next knob step measures positions right away.
 document.addEventListener('focusin', (e) => {
-  e.target.scrollIntoView?.({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  e.target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 });
 
 history.replaceState({}, '');

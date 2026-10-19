@@ -5,16 +5,31 @@ async function call(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`${API_BASE}${path}`);
   for (const [k, v] of Object.entries(params ?? {})) if (v != null && v !== '') url.searchParams.set(k, v);
   const headers = {};
-  const { cookie } = store.get();
-  if (cookie) headers['X-YT-Cookie'] = cookie;
+  const { auth } = store.get();
+  if (auth) headers['X-YT-Auth'] = btoa(JSON.stringify(auth));
   if (body) headers['Content-Type'] = 'application/json';
   const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  // The worker renews an expired access token and hands the new one back.
+  const update = res.headers.get('X-YT-Auth-Update');
+  if (update) {
+    try {
+      store.set({ auth: JSON.parse(atob(update)) });
+    } catch {
+      // Keep the old tokens; the next call will renew again.
+    }
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Ошибка ${res.status}`);
+  if (!res.ok) {
+    const err = new Error(data.error || `Ошибка ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
   return data;
 }
 
 export const api = {
+  authStart: () => call('/api/auth/start', { method: 'POST' }),
+  authPoll: (device_code, client) => call('/api/auth/poll', { method: 'POST', body: { device_code, client } }),
   home: (chip) => call('/api/home', { params: { chip } }),
   subscriptions: (chip) => call('/api/subscriptions', { params: { chip } }),
   localSubscriptions: (channels, filter) =>

@@ -4,15 +4,18 @@
 const KEY = 'carplay_tube_v1';
 
 const defaults = () => ({
-  cookie: '',
-  channels: [], // [{id, name, avatar}]
+  auth: null, // YouTube TV sign-in tokens, see worker /api/auth/*
+  view: 'phone', // 'phone': filters + grid, 'tv': shelves as rows
+  channels: [], // [{id, name, avatar}] followed without signing in
   recent: [], // recent search queries
   tab: 'home',
 });
 
 let state = defaults();
 try {
-  state = { ...state, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+  const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
+  delete saved.cookie; // first version signed in with a pasted cookie
+  state = { ...state, ...saved };
 } catch {
   // Private mode or blocked storage: start empty.
 }

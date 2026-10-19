@@ -24,3 +24,10 @@ test('left from the first card column reaches the rail', () => {
   const rail = [box(-140, -20, 80, 80), box(-140, 80, 80, 80)];
   assert.equal(pickNext(grid[3], rail, 'left'), 1);
 });
+
+test('down from a chip prefers the card below over the closer rail button', () => {
+  const chip = box(20, 0, 60, 40);
+  const rail = box(-90, 60, 80, 70); // closer, but off to the side
+  const card = box(0, 120, 200, 140);
+  assert.equal(pickNext(chip, [rail, card], 'down'), 1);
+});
