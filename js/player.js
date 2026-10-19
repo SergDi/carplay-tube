@@ -154,7 +154,6 @@ let fullscreen = false;
 for (const type of ['fullscreenchange', 'webkitfullscreenchange']) {
   document.addEventListener(type, () => {
     const now = Boolean(document.fullscreenElement ?? document.webkitFullscreenElement);
-    document.documentElement.classList.toggle('fullscreen', now);
     if (fullscreen && !now && isOpen()) $('p-back').click();
     fullscreen = now;
   });
@@ -169,14 +168,16 @@ function leaveFullscreen() {
   }
 }
 
-export function open(card, closeHandler) {
+// fullscreen: ask the browser for real fullscreen. Not in APTV: there it opens a
+// separate window that slides under the CarPlay dock and the knob cannot reach.
+export function open(card, closeHandler, { fullscreen = true } = {}) {
   onClose = closeHandler;
   $('p-title').textContent = card.title;
   $('p-channel').textContent = card.channel;
   $('player').hidden = false;
   $('app').inert = true;
   status('Загрузка…');
-  tryFullscreen();
+  if (fullscreen) tryFullscreen();
   showOverlay($('p-play'));
   pending = card;
   api.then(

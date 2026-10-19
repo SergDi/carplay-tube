@@ -45,12 +45,6 @@ button {
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* APTV keeps the page right of the CarPlay dock, but a fullscreen player covers
-   the whole screen and the dock floats over its left edge. app.js sets
-   .carplay-dock (APTV on CarPlay, or the setting) and .fullscreen. */
-:root { --dock: 0px; }
-:root.carplay-dock.fullscreen { --dock: calc(11vw + 6px); }
-
 /* ---------- top bar: sections + filters in one row ---------- */
 
 #top {
@@ -381,13 +375,11 @@ textarea {
   background: #000;
 }
 
-/* YT.Player replaces #yt with its iframe, keeping the id. The video takes the
-   part of the screen right of the CarPlay dock. */
+/* YT.Player replaces #yt with its iframe, keeping the id. */
 #yt {
   position: absolute;
-  top: 0;
-  left: var(--dock);
-  width: calc(100% - var(--dock));
+  inset: 0;
+  width: 100%;
   height: 100%;
   border: 0;
 }
@@ -403,7 +395,7 @@ textarea {
    knob lands on the video itself; pressing it brings the controls back. */
 #p-top, #p-bottom {
   position: absolute;
-  left: var(--dock);
+  left: 0;
   right: 0;
   padding: 18px 28px;
   opacity: 0;
@@ -430,7 +422,7 @@ textarea {
 
 #p-status {
   position: absolute;
-  left: calc(50% + var(--dock) / 2);
+  left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
   max-width: 80%;

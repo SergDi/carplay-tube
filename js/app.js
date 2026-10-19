@@ -1,9 +1,9 @@
-import { api } from './api.js?v=4b490ed-mvfupb7o';
-import { store } from './store.js?v=4b490ed-mvfupb7o';
-import { DIRECTIONS, moveFocus } from './nav.js?v=4b490ed-mvfupb7o';
-import * as player from './player.js?v=4b490ed-mvfupb7o';
-import { probeView, clearProbe, probeLog } from './probe.js?v=4b490ed-mvfupb7o';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=4b490ed-mvfupb7o';
+import { api } from './api.js?v=4567772-mvfuy2vq';
+import { store } from './store.js?v=4567772-mvfuy2vq';
+import { DIRECTIONS, moveFocus } from './nav.js?v=4567772-mvfuy2vq';
+import * as player from './player.js?v=4567772-mvfuy2vq';
+import { probeView, clearProbe, probeLog } from './probe.js?v=4567772-mvfuy2vq';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=4567772-mvfuy2vq';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -22,16 +22,8 @@ let signIn = null; // pending device-code sign-in: {user_code, verification_url,
 
 const signedIn = () => Boolean(store.get().auth);
 
-// CarPlay floats its app dock over the left edge of a fullscreen player in APTV.
-// APTV says who it is in the user agent; CarPlay screens are wide.
-const inAptvCarPlay = () => /aptv/i.test(navigator.userAgent) && innerWidth > innerHeight * 1.3;
-
-function applyDock() {
-  const pref = store.get().dock ?? 'auto';
-  document.documentElement.classList.toggle('carplay-dock', pref === 'on' || (pref === 'auto' && inAptvCarPlay()));
-}
-applyDock();
-addEventListener('resize', applyDock);
+// APTV names itself in the user agent; its browser is where the CarPlay knob works.
+const inAptv = () => /aptv/i.test(navigator.userAgent);
 
 // Re-rendering replaces the focused button; controls with a data-key get focus back.
 function keepFocus(render) {
@@ -521,27 +513,6 @@ function resultRows() {
   }, `add:${c.id}`));
 }
 
-function dockSection() {
-  const pref = store.get().dock ?? 'auto';
-  const option = (value, label) => {
-    const b = action(label, () => {
-      store.set({ dock: value });
-      applyDock();
-      keepFocus(showSettings);
-    }, `dock:${value}`);
-    b.classList.add('chip');
-    b.setAttribute('aria-pressed', String(pref === value));
-    return b;
-  };
-  return el(
-    'section',
-    {},
-    el('h2', { textContent: 'Отступ видео под меню CarPlay' }),
-    el('p', { textContent: `Видео на весь экран уходит под меню CarPlay слева. «Авто» сдвигает его вправо, когда сайт открыт в APTV на экране машины${inAptvCarPlay() ? ' — сейчас так и есть' : ''}.` }),
-    el('div', { className: 'actions' }, option('auto', 'Авто'), option('on', 'Всегда'), option('off', 'Никогда')),
-  );
-}
-
 function channelsSection() {
   const { channels } = store.get();
   const channelInput = el('input', { type: 'search', placeholder: 'Название канала или @имя', autocomplete: 'off' });
@@ -618,7 +589,6 @@ function showSettings() {
       { className: 'settings' },
       signInSection(),
       viewSection(),
-      dockSection(),
       probe,
       channelsSection(),
     ),
@@ -653,7 +623,11 @@ function show() {
 function openVideo(card, origin) {
   returnFocus = origin;
   history.pushState({ player: card.id }, '');
-  player.open(card, () => (returnFocus?.isConnected ? returnFocus : $('rail').querySelector('[aria-current="page"]')).focus());
+  player.open(
+    card,
+    () => (returnFocus?.isConnected ? returnFocus : $('rail').querySelector('[aria-current="page"]')).focus(),
+    { fullscreen: !inAptv() },
+  );
 }
 
 function back() {

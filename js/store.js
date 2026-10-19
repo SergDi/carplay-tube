@@ -6,7 +6,6 @@ const KEY = 'carplay_tube_v1';
 const defaults = () => ({
   auth: null, // YouTube TV sign-in tokens, see worker /api/auth/*
   view: 'phone', // 'phone': filters + grid, 'tv': shelves as rows
-  dock: 'auto', // left inset for the CarPlay dock: 'auto' | 'on' | 'off'
   channels: [], // [{id, name, avatar}] followed without signing in
   recent: [], // recent search queries
   tab: 'home',
