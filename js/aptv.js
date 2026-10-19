@@ -41,6 +41,36 @@ if (iosDesktopMode) enterAptvMode();
 // APTV's knob highlight: `outline: 3px solid rgb(255, 64, 98) !important`.
 const APTV_RING = /rgb\(255,\s*64,\s*98\)/;
 
+// APTV's nudge picks the nearest candidate in that direction by straight-line
+// distance, so from the first row of big cards «right» lands on the filters
+// above instead of the next card. It skips aria-hidden elements (knob-test.html),
+// so while the ring is on a card the top bar is hidden from it — except, on the
+// first row, the controls right above that card, which keeps «up» working.
+const topBar = () => [...document.querySelectorAll('#top button')];
+const overlapX = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0;
+
+function shapeTopBar(ringed) {
+  const bar = topBar();
+  const card = ringed.closest('#content') ? ringed : null;
+  if (!card) {
+    bar.forEach((b) => b.removeAttribute('aria-hidden'));
+    return;
+  }
+  const r = card.getBoundingClientRect();
+  const cards = [...document.querySelectorAll('#content button')];
+  const firstRow = !cards.some((c) => c !== card && c.getBoundingClientRect().bottom <= r.top + 1);
+  let above = firstRow ? bar.filter((b) => overlapX(b.getBoundingClientRect(), r)) : [];
+  if (firstRow && !above.length) {
+    // Nothing straight above: keep the closest one so «up» still leads somewhere.
+    const cx = r.left + r.width / 2;
+    above = [bar.reduce((best, b) => {
+      const d = Math.abs(b.getBoundingClientRect().left + b.getBoundingClientRect().width / 2 - cx);
+      return !best || d < best.d ? { b, d } : best;
+    }, null)?.b].filter(Boolean);
+  }
+  bar.forEach((b) => (above.includes(b) ? b.removeAttribute('aria-hidden') : b.setAttribute('aria-hidden', 'true')));
+}
+
 // Mirror APTV's selection into real focus, so everything that listens to focus
 // (scrolling, loading more, the player's controls) follows the knob. The ring
 // itself stays: APTV presses only the element that carries it.
@@ -50,6 +80,7 @@ new MutationObserver((records) => {
     if (!(el instanceof HTMLElement) || !APTV_RING.test(el.getAttribute('style') ?? '')) continue;
     if (!root.classList.contains('aptv')) enterAptvMode();
     if (document.activeElement !== el) el.focus({ preventScroll: true });
+    shapeTopBar(el);
   }
 }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });
 

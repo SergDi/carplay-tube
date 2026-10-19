@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=1af00ab-mvfwn9dj';
-import { api } from './api.js?v=1af00ab-mvfwn9dj';
-import { store } from './store.js?v=1af00ab-mvfwn9dj';
-import { DIRECTIONS, moveFocus } from './nav.js?v=1af00ab-mvfwn9dj';
-import * as player from './player.js?v=1af00ab-mvfwn9dj';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=1af00ab-mvfwn9dj';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=1af00ab-mvfwn9dj';
+import { iosDesktopMode } from './aptv.js?v=a27b457-mvfwta15';
+import { api } from './api.js?v=a27b457-mvfwta15';
+import { store } from './store.js?v=a27b457-mvfwta15';
+import { DIRECTIONS, moveFocus } from './nav.js?v=a27b457-mvfwta15';
+import * as player from './player.js?v=a27b457-mvfwta15';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=a27b457-mvfwta15';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=a27b457-mvfwta15';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {

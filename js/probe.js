@@ -115,7 +115,7 @@ const insideOurs = (node) => {
 };
 
 // Attributes our own code changes; anything else changing is APTV (or YouTube).
-const OUR_ATTRS = new Set(['class', 'aria-current', 'aria-pressed', 'aria-label', 'title', 'value', 'data-named', 'data-tab', 'data-state', 'hidden', 'inert']);
+const OUR_ATTRS = new Set(['class', 'aria-current', 'aria-pressed', 'aria-label', 'aria-hidden', 'title', 'value', 'data-named', 'data-tab', 'data-state', 'hidden', 'inert']);
 const fromYouTube = (n) => /youtube|ytimg/.test(n.src ?? '') || /^www-widgetapi/.test(n.id ?? '');
 
 new MutationObserver((records) => {
