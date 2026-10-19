@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=fe36222-mvfwdr0z';
-import { api } from './api.js?v=fe36222-mvfwdr0z';
-import { store } from './store.js?v=fe36222-mvfwdr0z';
-import { DIRECTIONS, moveFocus } from './nav.js?v=fe36222-mvfwdr0z';
-import * as player from './player.js?v=fe36222-mvfwdr0z';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=fe36222-mvfwdr0z';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=fe36222-mvfwdr0z';
+import { iosDesktopMode } from './aptv.js?v=2e5e886-mvfwhyoq';
+import { api } from './api.js?v=2e5e886-mvfwhyoq';
+import { store } from './store.js?v=2e5e886-mvfwhyoq';
+import { DIRECTIONS, moveFocus } from './nav.js?v=2e5e886-mvfwhyoq';
+import * as player from './player.js?v=2e5e886-mvfwhyoq';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=2e5e886-mvfwhyoq';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=2e5e886-mvfwhyoq';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -720,8 +720,10 @@ $('rail').querySelector('[aria-current="page"]').focus();
 // Browsers inside apps (APTV) may keep an old copy of this page. The page
 // knows its own version from the ?v= stamp; if the published one differs,
 // reload under a new address that no cache has seen.
+// Checked on load and every minute (APTV can hide its reload button), but
+// never while a video plays.
 const VERSION = new URL(import.meta.url).searchParams.get('v');
-if (VERSION) {
+function checkVersion() {
   fetch(`version.json?${Date.now()}`, { cache: 'no-store' })
     .then((r) => (r.ok ? r.json() : null))
     .then((latest) => {
@@ -729,4 +731,8 @@ if (VERSION) {
       if (latest?.v && latest.v !== VERSION && !tried && !player.isOpen()) location.replace(`${location.pathname}?v=${latest.v}`);
     })
     .catch(() => {});
+}
+if (VERSION) {
+  checkVersion();
+  setInterval(checkVersion, 60_000);
 }
