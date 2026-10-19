@@ -151,6 +151,17 @@ function tryFullscreen() {
   }
 }
 
+// In fullscreen the browser keeps Escape for itself and only leaves fullscreen;
+// treat that exit as «Назад» so one press still closes the player.
+let fullscreen = false;
+for (const type of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(type, () => {
+    const now = Boolean(document.fullscreenElement ?? document.webkitFullscreenElement);
+    if (fullscreen && !now && isOpen()) $('p-back').click();
+    fullscreen = now;
+  });
+}
+
 function leaveFullscreen() {
   try {
     if (document.fullscreenElement) document.exitFullscreen();

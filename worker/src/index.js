@@ -123,8 +123,14 @@ async function homeFeed(ctx, url) {
 
 async function subscriptionsFeed(ctx, url) {
   const data = await tvBrowse(ctx, 'FEsubscriptions');
-  // Per-channel shelves on the TV page have no header; name them after the channel.
-  const rows = shelves(data).map((s) => ({ ...s, title: s.title || s.cards[0]?.channel || '' }));
+  // The TV page splits fresh uploads into small untitled shelves; show them as one row.
+  const rows = [];
+  let fresh = null;
+  for (const s of shelves(data)) {
+    if (s.title) rows.push(s);
+    else if (fresh) fresh.cards.push(...s.cards);
+    else rows.push((fresh = { title: 'Новые видео', cards: [...s.cards] }));
+  }
   return { ...subscriptionsView(data, url.searchParams.get('chip')), shelves: rows };
 }
 

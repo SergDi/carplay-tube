@@ -363,10 +363,28 @@ function viewSection() {
   );
 }
 
+let channelResults = []; // last channel search, kept across settings re-renders
+
+function toggleChannel(c) {
+  const { channels } = store.get();
+  const has = channels.some((x) => x.id === c.id);
+  store.set({ channels: has ? channels.filter((x) => x.id !== c.id) : [...channels, c] });
+  toast(has ? `Убран: ${c.name}` : `Добавлен: ${c.name}`);
+}
+
+function resultRows() {
+  const mine = new Set(store.get().channels.map((c) => c.id));
+  return channelResults.map((c) => channelRow(c, mine.has(c.id) ? 'Убрать' : 'Добавить', () => {
+    toggleChannel(c);
+    keepFocus(showSettings);
+  }, `add:${c.id}`));
+}
+
 function channelsSection() {
   const { channels } = store.get();
   const channelInput = el('input', { type: 'search', placeholder: 'Название канала или @имя', autocomplete: 'off' });
-  const found = el('div', { className: 'channel-list' });
+  channelInput.dataset.key = 'channel-q';
+  const found = el('div', { className: 'channel-list' }, ...resultRows());
   const channelForm = el('form', { className: 'search' }, channelInput, el('button', { className: 'btn', type: 'submit', textContent: 'Найти канал' }));
   channelForm.onsubmit = async (e) => {
     e.preventDefault();
@@ -375,11 +393,8 @@ function channelsSection() {
     found.replaceChildren(el('p', { textContent: 'Ищу…' }));
     try {
       const { channels: list } = await api.channelSearch(q);
-      found.replaceChildren(...list.slice(0, 6).map((c) => channelRow(c, 'Добавить', () => {
-        if (!store.get().channels.some((x) => x.id === c.id)) store.set({ channels: [...store.get().channels, c] });
-        toast(`Добавлен: ${c.name}`);
-        keepFocus(showSettings);
-      }, `remove:${c.id}`)));
+      channelResults = list.slice(0, 6);
+      found.replaceChildren(...resultRows());
       if (!list.length) found.replaceChildren(el('p', { textContent: 'Каналы не нашлись.' }));
       found.querySelector('button')?.focus();
     } catch (err) {
@@ -409,7 +424,7 @@ function channelsSection() {
       store.set({ channels: store.get().channels.filter((x) => x.id !== c.id) });
       const next = channels[i + 1] ?? channels[i - 1];
       keepFocus(showSettings);
-      document.querySelector(`[data-key="remove:${next?.id}"]`)?.focus();
+      document.querySelector(next ? `[data-key="remove:${next.id}"]` : '[data-key="channel-q"]')?.focus();
     }, `remove:${c.id}`))),
   );
 }
@@ -453,17 +468,17 @@ function show() {
 
 // ---------- player ----------
 
+// No history entries: the YouTube iframe adds its own, and in WebKit a
+// history.back() would land on those instead of closing the player.
 function openVideo(card, origin) {
   returnFocus = origin;
-  history.pushState({ player: card.id }, '');
   player.open(card, () => (returnFocus?.isConnected ? returnFocus : $('rail').querySelector('[aria-current="page"]')).focus());
 }
 
 function back() {
-  if (player.isOpen()) history.back();
+  player.close();
 }
 
-window.addEventListener('popstate', () => player.close());
 player.bindControls(back);
 
 // ---------- knob / keyboard ----------
@@ -529,6 +544,5 @@ document.addEventListener('focusin', (e) => {
   e.target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 });
 
-history.replaceState({}, '');
 show();
 $('rail').querySelector('[aria-current="page"]').focus();
