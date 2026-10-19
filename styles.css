@@ -7,7 +7,6 @@
   --accent: #ff3b30;
   --focus: #fff;
   --radius: 14px;
-  --rail: 104px;
   color-scheme: dark;
 }
 
@@ -41,34 +40,48 @@ button {
 
 #app {
   display: flex;
+  flex-direction: column;
   height: 100%;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + var(--dock));
 }
 
-/* ---------- rail ---------- */
+/* CarPlay in APTV floats its own app dock over the left edge of the page;
+   app.js sets .carplay-dock there (or by the setting). */
+:root { --dock: 0px; }
+:root.carplay-dock { --dock: calc(11vw + 6px); }
+
+/* ---------- top bar: sections + filters in one row ---------- */
+
+#top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 8px;
+  min-width: 0;
+}
 
 #rail {
-  flex: 0 0 var(--rail);
+  flex: none;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 10px;
-  background: var(--surface);
+  gap: 6px;
+  padding-right: 10px;
+  border-right: 2px solid var(--surface-2);
 }
 
 #rail button {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 4px;
-  border-radius: var(--radius);
+  gap: 8px;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
-#rail svg { width: 32px; height: 32px; fill: currentColor; }
+#rail svg { width: 26px; height: 26px; fill: currentColor; flex: none; }
 
 #rail button[aria-current="page"] {
   color: var(--text);
@@ -77,28 +90,29 @@ button {
 
 #rail button[aria-current="page"] svg { fill: var(--accent); }
 
+/* Labels only on the open section, so the filters keep room. */
+#rail button:not([aria-current="page"]) span { display: none; }
+
 /* ---------- main ---------- */
 
 #main {
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 16px 20px 32px;
-  scroll-padding: 80px 0 24px;
+  padding: 6px 16px 32px;
+  scroll-padding: 12px 0 24px;
 }
 
 #chips {
-  position: sticky;
-  top: -16px;
-  z-index: 2;
+  flex: 1;
+  min-width: 0;
   display: flex;
-  gap: 10px;
-  margin: -16px -20px 12px;
-  padding: 16px 20px 12px;
+  gap: 8px;
   overflow-x: auto;
   scrollbar-width: none;
-  background: linear-gradient(var(--bg) 80%, transparent);
+  padding: 4px;
+  margin: -4px;
 }
 
 #chips::-webkit-scrollbar { display: none; }
@@ -106,7 +120,7 @@ button {
 .chip {
   flex: none;
   min-height: 48px;
-  padding: 0 20px;
+  padding: 0 18px;
   border-radius: 12px;
   background: var(--surface-2);
   font-size: 18px;
@@ -366,10 +380,13 @@ textarea {
   background: #000;
 }
 
-#yt, #player iframe {
+/* YT.Player replaces #yt with its iframe, keeping the id. The video takes the
+   part of the screen right of the CarPlay dock. */
+#yt {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  top: 0;
+  left: var(--dock);
+  width: calc(100% - var(--dock));
   height: 100%;
   border: 0;
 }
@@ -377,23 +394,27 @@ textarea {
 /* The iframe never takes the knob or touches: controls live on top of it.
    WebKit paints video in its own layer, so the stacking order is explicit. */
 #player iframe { pointer-events: none; z-index: 0; }
-#p-shield { position: absolute; inset: 0; z-index: 1; }
+#p-shield { position: absolute; inset: 0; z-index: 1; border-radius: 0; }
+#p-shield:focus { outline: none; }
 #p-top, #p-bottom, #p-status { z-index: 2; }
 
+/* Hidden controls are also invisible to APTV's knob focus (visibility), so the
+   knob lands on the video itself; pressing it brings the controls back. */
 #p-top, #p-bottom {
   position: absolute;
-  left: 0;
+  left: var(--dock);
   right: 0;
   padding: 18px 28px;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
   pointer-events: none;
 }
 
 #p-top { top: 0; background: linear-gradient(rgba(0, 0, 0, 0.75), transparent); }
 #p-bottom { bottom: 0; padding-bottom: 22px; background: linear-gradient(transparent, rgba(0, 0, 0, 0.85)); }
 
-#player.show #p-top, #player.show #p-bottom { opacity: 1; pointer-events: auto; }
+#player.show #p-top, #player.show #p-bottom { opacity: 1; visibility: visible; transition: opacity 0.25s ease; pointer-events: auto; }
 
 #p-title {
   margin: 0;
@@ -408,7 +429,7 @@ textarea {
 
 #p-status {
   position: absolute;
-  left: 50%;
+  left: calc(50% + var(--dock) / 2);
   top: 50%;
   transform: translate(-50%, -50%);
   max-width: 80%;
@@ -469,10 +490,8 @@ textarea {
 }
 
 @media (max-height: 520px) {
-  #main { padding-top: 12px; }
   .pbtn span { display: none; }
   .pbtn.primary span, #p-back span { display: inline; }
-  #rail button span { font-size: 12px; }
 }
 
 #toast {

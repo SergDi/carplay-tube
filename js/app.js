@@ -1,9 +1,9 @@
-import { api } from './api.js?v=cadb5d4-mvftvky5';
-import { store } from './store.js?v=cadb5d4-mvftvky5';
-import { DIRECTIONS, moveFocus } from './nav.js?v=cadb5d4-mvftvky5';
-import * as player from './player.js?v=cadb5d4-mvftvky5';
-import { probeView, clearProbe } from './probe.js?v=cadb5d4-mvftvky5';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=cadb5d4-mvftvky5';
+import { api } from './api.js?v=f046875-mvfuhsjz';
+import { store } from './store.js?v=f046875-mvfuhsjz';
+import { DIRECTIONS, moveFocus } from './nav.js?v=f046875-mvfuhsjz';
+import * as player from './player.js?v=f046875-mvfuhsjz';
+import { probeView, clearProbe } from './probe.js?v=f046875-mvfuhsjz';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=f046875-mvfuhsjz';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -21,6 +21,17 @@ let returnFocus = null;
 let signIn = null; // pending device-code sign-in: {user_code, verification_url, timer}
 
 const signedIn = () => Boolean(store.get().auth);
+
+// CarPlay floats its app dock over the left edge of APTV's browser. APTV says
+// who it is in the user agent; CarPlay screens are wide.
+const inAptvCarPlay = () => /aptv/i.test(navigator.userAgent) && innerWidth > innerHeight * 1.3;
+
+function applyDock() {
+  const pref = store.get().dock ?? 'auto';
+  document.documentElement.classList.toggle('carplay-dock', pref === 'on' || (pref === 'auto' && inAptvCarPlay()));
+}
+applyDock();
+addEventListener('resize', applyDock);
 
 // Re-rendering replaces the focused button; controls with a data-key get focus back.
 function keepFocus(render) {
@@ -510,6 +521,27 @@ function resultRows() {
   }, `add:${c.id}`));
 }
 
+function dockSection() {
+  const pref = store.get().dock ?? 'auto';
+  const option = (value, label) => {
+    const b = action(label, () => {
+      store.set({ dock: value });
+      applyDock();
+      keepFocus(showSettings);
+    }, `dock:${value}`);
+    b.classList.add('chip');
+    b.setAttribute('aria-pressed', String(pref === value));
+    return b;
+  };
+  return el(
+    'section',
+    {},
+    el('h2', { textContent: 'Отступ под меню CarPlay' }),
+    el('p', { textContent: `Меню CarPlay висит поверх левого края. «Авто» сдвигает сайт вправо, когда он открыт в APTV на экране машины${inAptvCarPlay() ? ' — сейчас так и есть' : ''}.` }),
+    el('div', { className: 'actions' }, option('auto', 'Авто'), option('on', 'Всегда'), option('off', 'Никогда')),
+  );
+}
+
 function channelsSection() {
   const { channels } = store.get();
   const channelInput = el('input', { type: 'search', placeholder: 'Название канала или @имя', autocomplete: 'off' });
@@ -567,6 +599,7 @@ function showSettings() {
     el('h2', { textContent: 'Проверка шайбы' }),
     el('p', { textContent: 'Последние 12 событий, новые сверху. Сфотографируй экран после проверки.' }),
     probeView(),
+    el('p', { className: 'note', textContent: `Экран ${innerWidth}×${innerHeight}, браузер: ${navigator.userAgent}` }),
     el('div', { className: 'actions' }, action('Очистить журнал', clearProbe, 'probe-clear')),
   );
   $('content').replaceChildren(
@@ -575,6 +608,7 @@ function showSettings() {
       { className: 'settings' },
       signInSection(),
       viewSection(),
+      dockSection(),
       probe,
       channelsSection(),
     ),
@@ -604,17 +638,20 @@ function show() {
 
 // ---------- player ----------
 
-// No history entries: the YouTube iframe adds its own, and in WebKit a
-// history.back() would land on those instead of closing the player.
+// The player is a history entry, so the car's BACK (APTV's browser going back)
+// closes the player instead of leaving the page with the video still playing.
 function openVideo(card, origin) {
   returnFocus = origin;
+  history.pushState({ player: card.id }, '');
   player.open(card, () => (returnFocus?.isConnected ? returnFocus : $('rail').querySelector('[aria-current="page"]')).focus());
 }
 
 function back() {
-  player.close();
+  if (history.state?.player) history.back();
+  else player.close();
 }
 
+window.addEventListener('popstate', () => player.close());
 player.bindControls(back);
 
 // ---------- knob / keyboard ----------

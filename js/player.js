@@ -3,7 +3,7 @@
 // own overlay, which appears on any key and hides again after a pause.
 
 const $ = (id) => document.getElementById(id);
-const HIDE_AFTER = 4000;
+const HIDE_AFTER = 6000;
 
 let yt = null;
 let ready = false;
@@ -201,9 +201,28 @@ export function close() {
   onClose();
 }
 
+// APTV presses whatever its knob focus is on, even a control that is hidden:
+// the first press only brings the controls back.
+const guard = (fn) => () => {
+  if (!overlayVisible()) {
+    showOverlay();
+    return;
+  }
+  poke();
+  fn();
+};
+
+// Leaving the page (car BACK closing APTV's browser, phone locked) stops the sound.
+function pauseInBackground() {
+  if (ready && isOpen() && document.visibilityState === 'hidden') yt.pauseVideo();
+}
+document.addEventListener('visibilitychange', pauseInBackground);
+window.addEventListener('pagehide', () => ready && isOpen() && yt.pauseVideo());
+
 export function bindControls(back) {
-  $('p-back').onclick = back;
-  $('p-play').onclick = () => {
+  $('p-back').onclick = guard(back);
+  $('p-shield').onclick = () => (overlayVisible() ? hideOverlay() : showOverlay());
+  const play = () => {
     if (!ready) return;
     if (yt.getPlayerState() === YT.PlayerState.PLAYING) yt.pauseVideo();
     else {
@@ -213,15 +232,14 @@ export function bindControls(back) {
     }
     tick();
   };
-  $('p-rew').onclick = () => ready && yt.seekTo(Math.max(0, yt.getCurrentTime() - 10), true);
-  $('p-fwd').onclick = () => ready && yt.seekTo(yt.getCurrentTime() + 30, true);
+  $('p-play').onclick = guard(play);
+  $('p-rew').onclick = guard(() => ready && yt.seekTo(Math.max(0, yt.getCurrentTime() - 10), true));
+  $('p-fwd').onclick = guard(() => ready && yt.seekTo(yt.getCurrentTime() + 30, true));
   // APTV can move focus itself with the knob: a hidden control that gets focus
   // brings the controls back, so the driver sees what is selected.
-  $('player').addEventListener('focusin', () => {
-    if (!overlayVisible()) showOverlay(document.activeElement);
+  $('player').addEventListener('focusin', (e) => {
+    if (e.target.id === 'p-shield') return;
+    if (!overlayVisible()) showOverlay(e.target);
     else poke();
-  });
-  $('player').addEventListener('click', (e) => {
-    if (e.target === $('player') || e.target.id === 'p-shield') showOverlay();
   });
 }

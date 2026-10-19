@@ -6,10 +6,11 @@
   <meta name="theme-color" content="#000000">
   <title>CarPlay Tube</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23ff3b30'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='white'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="styles.css?v=cadb5d4-mvftvky5">
+  <link rel="stylesheet" href="styles.css?v=f046875-mvfuhsjz">
 </head>
 <body>
   <div id="app">
+    <header id="top">
     <nav id="rail" aria-label="Разделы">
       <button type="button" data-tab="home">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
@@ -28,16 +29,17 @@
         <span>Настройки</span>
       </button>
     </nav>
+    <div id="chips" role="toolbar" aria-label="Фильтры" hidden></div>
+    </header>
     <main id="main">
       <div id="search-bar" hidden></div>
-      <div id="chips" role="toolbar" aria-label="Фильтры" hidden></div>
       <section id="content" aria-live="polite"></section>
     </main>
   </div>
 
   <div id="player" hidden>
     <div id="yt"></div>
-    <div id="p-shield"></div>
+    <button type="button" id="p-shield" aria-label="Показать управление"></button>
     <div id="p-top">
       <p id="p-title"></p>
       <p id="p-channel"></p>
@@ -66,6 +68,6 @@
   </div>
 
   <div id="toast" role="status" hidden></div>
-  <script type="module" src="js/app.js?v=cadb5d4-mvftvky5"></script>
+  <script type="module" src="js/app.js?v=f046875-mvfuhsjz"></script>
 </body>
 </html>
