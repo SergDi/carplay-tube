@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=a024dc5-mvfwverm';
-import { api } from './api.js?v=a024dc5-mvfwverm';
-import { store } from './store.js?v=a024dc5-mvfwverm';
-import { DIRECTIONS, moveFocus } from './nav.js?v=a024dc5-mvfwverm';
-import * as player from './player.js?v=a024dc5-mvfwverm';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=a024dc5-mvfwverm';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=a024dc5-mvfwverm';
+import { iosDesktopMode } from './aptv.js?v=ad34351-mvfwzwnm';
+import { api } from './api.js?v=ad34351-mvfwzwnm';
+import { store } from './store.js?v=ad34351-mvfwzwnm';
+import { DIRECTIONS, moveFocus } from './nav.js?v=ad34351-mvfwzwnm';
+import * as player from './player.js?v=ad34351-mvfwzwnm';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=ad34351-mvfwzwnm';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=ad34351-mvfwzwnm';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -601,6 +601,7 @@ function showSettings() {
       }, 'probe-send'),
       action('Очистить журнал', clearProbe, 'probe-clear'),
       action('Тест шайбы', () => location.assign('knob-test.html'), 'knob-test'),
+      action('Тест датчиков', () => location.assign('sensor-test.html'), 'sensor-test'),
     ),
   );
   $('content').replaceChildren(

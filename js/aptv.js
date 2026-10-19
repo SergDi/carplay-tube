@@ -20,15 +20,17 @@ const seenBefore = () => {
 export let iosDesktopMode = /Macintosh/.test(navigator.userAgent) && (navigator.maxTouchPoints > 0 || seenBefore());
 
 // Lay the page out as if the screen were ~820px wide, the size of a car display.
+// Measured once: in WebKit the zoom itself changes innerWidth, so reacting to
+// resize would undo it (and the car screen does not rotate).
 function fitWidth() {
-  root.style.zoom = iosDesktopMode && innerWidth > 900 ? String(innerWidth / 820) : '';
+  if (root.style.zoom) return;
+  if (innerWidth > 900) root.style.zoom = String(innerWidth / 820);
 }
 
 function enterAptvMode() {
   iosDesktopMode = true;
   root.classList.add('aptv');
   fitWidth();
-  addEventListener('resize', fitWidth);
   try {
     localStorage.setItem(SEEN, '1');
   } catch {
