@@ -1,0 +1,15 @@
+{
+  "name": "carplay-tube-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "youtubei.js": "18.2.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.2"
+  }
+}
