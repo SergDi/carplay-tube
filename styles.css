@@ -374,9 +374,11 @@ textarea {
   border: 0;
 }
 
-/* The iframe never takes the knob or touches: controls live on top of it. */
-#player iframe { pointer-events: none; }
-#p-shield { position: absolute; inset: 0; }
+/* The iframe never takes the knob or touches: controls live on top of it.
+   WebKit paints video in its own layer, so the stacking order is explicit. */
+#player iframe { pointer-events: none; z-index: 0; }
+#p-shield { position: absolute; inset: 0; z-index: 1; }
+#p-top, #p-bottom, #p-status { z-index: 2; }
 
 #p-top, #p-bottom {
   position: absolute;
@@ -455,6 +457,12 @@ textarea {
 #p-time { position: absolute; top: 20px; right: 28px; color: var(--muted); font-size: 20px; font-variant-numeric: tabular-nums; }
 
 /* Short CarPlay screens: compact labels, keep targets large. */
+/* Wide, low CarPlay screens (BMW: 1422×456): smaller cards, more columns. */
+@media (max-height: 520px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .row-track .card { flex-basis: 220px; }
+}
+
 @media (max-width: 900px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px 14px; }
   .title { font-size: 16px; }

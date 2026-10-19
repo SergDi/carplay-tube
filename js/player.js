@@ -215,6 +215,12 @@ export function bindControls(back) {
   };
   $('p-rew').onclick = () => ready && yt.seekTo(Math.max(0, yt.getCurrentTime() - 10), true);
   $('p-fwd').onclick = () => ready && yt.seekTo(yt.getCurrentTime() + 30, true);
+  // APTV can move focus itself with the knob: a hidden control that gets focus
+  // brings the controls back, so the driver sees what is selected.
+  $('player').addEventListener('focusin', () => {
+    if (!overlayVisible()) showOverlay(document.activeElement);
+    else poke();
+  });
   $('player').addEventListener('click', (e) => {
     if (e.target === $('player') || e.target.id === 'p-shield') showOverlay();
   });
