@@ -46,7 +46,7 @@ const APTV_RING = /rgb\(255,\s*64,\s*98\)/;
 // above instead of the next card. It skips aria-hidden elements (knob-test.html),
 // so while the ring is on a card the top bar is hidden from it — except, on the
 // first row, the controls right above that card, which keeps «up» working.
-const topBar = () => [...document.querySelectorAll('#top button')];
+const topBar = () => [...document.querySelectorAll('#top button, #search-bar button, #search-bar input')];
 const overlapX = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0;
 
 function shapeTopBar(ringed) {
