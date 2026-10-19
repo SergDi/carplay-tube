@@ -14,4 +14,5 @@ for (const file of ['index.html', ...readdirSync('js').map((f) => `js/${f}`)]) {
   const after = stamp(before);
   if (after !== before) writeFileSync(file, after);
 }
+writeFileSync('version.json', `${JSON.stringify({ v: version })}\n`);
 console.log(`stamped ${version}`);

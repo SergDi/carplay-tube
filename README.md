@@ -31,7 +31,7 @@ The first answer carries three pages of shelves; near the end of the grid, a row
 
 In the player the first key only shows the controls; they hide after 4 s of playback. The YouTube iframe never takes focus. If the browser refuses to start the video by itself, «Пуск» is focused; one press starts it with sound.
 
-Real browser fullscreen is requested when a video opens; browsers inside apps on iPhone usually refuse it, and the player already fills the page.
+The player fills the page and never requests browser fullscreen: in APTV that opens a separate window under the CarPlay dock which the knob cannot reach.
 
 ## Develop
 
@@ -49,7 +49,7 @@ On localhost the site talks to the local worker (`js/config.js`).
 cd worker && npx wrangler login && npm run deploy
 ```
 
-Put the printed `*.workers.dev` URL into `js/config.js`, run `npm run stamp` (adds `?v=` to every script, style and import so the APTV browser does not keep old files), commit, push to `main`; GitHub Pages serves the repository root.
+Put the printed `*.workers.dev` URL into `js/config.js`, run `npm run stamp` (adds `?v=` to every script, style and import and writes `version.json`; a page that finds a newer `version.json` reloads itself, so the APTV browser never keeps an old copy), commit, push to `main`; GitHub Pages serves the repository root.
 
 ## Open in APTV
 

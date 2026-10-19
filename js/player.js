@@ -138,46 +138,15 @@ function start(card) {
   autoplayCheck = setTimeout(autoplayRefused, 5000);
 }
 
-function tryFullscreen() {
-  const el = document.documentElement;
-  try {
-    const req = el.requestFullscreen ?? el.webkitRequestFullscreen;
-    req?.call(el)?.catch?.(() => {});
-  } catch {
-    // Not offered by this browser: the page itself already fills the screen.
-  }
-}
-
-// In fullscreen the browser keeps Escape for itself and only leaves fullscreen;
-// treat that exit as «Назад» so one press still closes the player.
-let fullscreen = false;
-for (const type of ['fullscreenchange', 'webkitfullscreenchange']) {
-  document.addEventListener(type, () => {
-    const now = Boolean(document.fullscreenElement ?? document.webkitFullscreenElement);
-    if (fullscreen && !now && isOpen()) $('p-back').click();
-    fullscreen = now;
-  });
-}
-
-function leaveFullscreen() {
-  try {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
-  } catch {
-    // Nothing to leave.
-  }
-}
-
-// fullscreen: ask the browser for real fullscreen. Not in APTV: there it opens a
-// separate window that slides under the CarPlay dock and the knob cannot reach.
-export function open(card, closeHandler, { fullscreen = true } = {}) {
+// The player fills the page and never asks for browser fullscreen: in APTV that
+// opens a separate window under the CarPlay dock that the knob cannot reach.
+export function open(card, closeHandler) {
   onClose = closeHandler;
   $('p-title').textContent = card.title;
   $('p-channel').textContent = card.channel;
   $('player').hidden = false;
   $('app').inert = true;
   status('Загрузка…');
-  if (fullscreen) tryFullscreen();
   showOverlay($('p-play'));
   pending = card;
   api.then(
@@ -196,7 +165,6 @@ export function close() {
   clearTimeout(hideTimer);
   clearInterval(tickTimer);
   if (ready) yt.stopVideo();
-  leaveFullscreen();
   $('player').hidden = true;
   $('player').classList.remove('show');
   $('app').inert = false;

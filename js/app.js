@@ -1,9 +1,9 @@
-import { api } from './api.js?v=4567772-mvfuy2vq';
-import { store } from './store.js?v=4567772-mvfuy2vq';
-import { DIRECTIONS, moveFocus } from './nav.js?v=4567772-mvfuy2vq';
-import * as player from './player.js?v=4567772-mvfuy2vq';
-import { probeView, clearProbe, probeLog } from './probe.js?v=4567772-mvfuy2vq';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=4567772-mvfuy2vq';
+import { api } from './api.js?v=1b32ab0-mvfv2qnc';
+import { store } from './store.js?v=1b32ab0-mvfv2qnc';
+import { DIRECTIONS, moveFocus } from './nav.js?v=1b32ab0-mvfv2qnc';
+import * as player from './player.js?v=1b32ab0-mvfv2qnc';
+import { probeView, clearProbe, probeLog } from './probe.js?v=1b32ab0-mvfv2qnc';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=1b32ab0-mvfv2qnc';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -22,8 +22,6 @@ let signIn = null; // pending device-code sign-in: {user_code, verification_url,
 
 const signedIn = () => Boolean(store.get().auth);
 
-// APTV names itself in the user agent; its browser is where the CarPlay knob works.
-const inAptv = () => /aptv/i.test(navigator.userAgent);
 
 // Re-rendering replaces the focused button; controls with a data-key get focus back.
 function keepFocus(render) {
@@ -623,11 +621,7 @@ function show() {
 function openVideo(card, origin) {
   returnFocus = origin;
   history.pushState({ player: card.id }, '');
-  player.open(
-    card,
-    () => (returnFocus?.isConnected ? returnFocus : $('rail').querySelector('[aria-current="page"]')).focus(),
-    { fullscreen: !inAptv() },
-  );
+  player.open(card, () => (returnFocus?.isConnected ? returnFocus : $('rail').querySelector('[aria-current="page"]')).focus());
 }
 
 function back() {
@@ -701,3 +695,17 @@ document.addEventListener('focusin', (e) => {
 
 show();
 $('rail').querySelector('[aria-current="page"]').focus();
+
+// Browsers inside apps (APTV) may keep an old copy of this page. The page
+// knows its own version from the ?v= stamp; if the published one differs,
+// reload under a new address that no cache has seen.
+const VERSION = new URL(import.meta.url).searchParams.get('v');
+if (VERSION) {
+  fetch(`version.json?${Date.now()}`, { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((latest) => {
+      const tried = new URLSearchParams(location.search).get('v') === latest?.v; // never loop
+      if (latest?.v && latest.v !== VERSION && !tried && !player.isOpen()) location.replace(`${location.pathname}?v=${latest.v}`);
+    })
+    .catch(() => {});
+}
