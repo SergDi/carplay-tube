@@ -227,7 +227,18 @@ async function localSubscriptions(request) {
   };
 }
 
+// A knob diagnostics log from the car, read back with
+// `npx wrangler kv key list --binding REPORTS --remote`.
+async function report(ctx, env) {
+  const body = await ctx.request.text();
+  if (body.length > 64_000) throw new HttpError(413, 'Слишком большой журнал');
+  const key = `report:${new Date().toISOString()}:${crypto.randomUUID().slice(0, 8)}`;
+  await env.REPORTS.put(key, body, { expirationTtl: 14 * 24 * 3600 });
+  return { saved: key };
+}
+
 const ROUTES = {
+  'POST /api/report': (ctx, env) => report(ctx, env),
   'POST /api/auth/start': () => authStart(),
   'POST /api/auth/poll': (ctx) => authPoll(ctx.request),
   'GET /api/home': (ctx) => tvFeed(ctx, 'FEwhat_to_watch', 'home'),
@@ -242,14 +253,14 @@ const ROUTES = {
 };
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     const url = new URL(request.url);
     const route = ROUTES[`${request.method} ${url.pathname}`];
     if (!route) return json({ error: 'Не найдено' }, 404);
     const ctx = { request, url, tokens: decodeTokens(request.headers.get('X-YT-Auth')), refreshed: null };
     try {
-      const body = await route(ctx);
+      const body = await route(ctx, env);
       const headers = { 'Cache-Control': ctx.tokens || url.pathname.startsWith('/api/auth') ? 'private, no-store' : 'public, max-age=300' };
       if (ctx.refreshed) headers['X-YT-Auth-Update'] = encodeTokens(ctx.refreshed);
       return json(body, 200, headers);

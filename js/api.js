@@ -1,5 +1,5 @@
-import { API_BASE } from './config.js?v=f92e843-mvfulmgb';
-import { store } from './store.js?v=f92e843-mvfulmgb';
+import { API_BASE } from './config.js?v=4b490ed-mvfupb7o';
+import { store } from './store.js?v=4b490ed-mvfupb7o';
 
 async function call(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`${API_BASE}${path}`);
@@ -39,4 +39,5 @@ export const api = {
   search: (q, chip) => call('/api/search', { params: { q, chip } }),
   channelSearch: (q) => call('/api/channel-search', { params: { q } }),
   myChannels: () => call('/api/my-channels'),
+  report: (data) => call('/api/report', { method: 'POST', body: data }),
 };

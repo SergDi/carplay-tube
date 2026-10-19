@@ -1,9 +1,9 @@
-import { api } from './api.js?v=f92e843-mvfulmgb';
-import { store } from './store.js?v=f92e843-mvfulmgb';
-import { DIRECTIONS, moveFocus } from './nav.js?v=f92e843-mvfulmgb';
-import * as player from './player.js?v=f92e843-mvfulmgb';
-import { probeView, clearProbe } from './probe.js?v=f92e843-mvfulmgb';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=f92e843-mvfulmgb';
+import { api } from './api.js?v=4b490ed-mvfupb7o';
+import { store } from './store.js?v=4b490ed-mvfupb7o';
+import { DIRECTIONS, moveFocus } from './nav.js?v=4b490ed-mvfupb7o';
+import * as player from './player.js?v=4b490ed-mvfupb7o';
+import { probeView, clearProbe, probeLog } from './probe.js?v=4b490ed-mvfupb7o';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=4b490ed-mvfupb7o';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -597,10 +597,20 @@ function showSettings() {
     'section',
     {},
     el('h2', { textContent: 'Проверка шайбы' }),
-    el('p', { textContent: 'Последние 12 событий, новые сверху. Сфотографируй экран после проверки.' }),
+    el('p', { textContent: 'Последние 40 событий, новые сверху: что получил сайт и что APTV сделал со страницей. После проверки нажми «Отправить журнал».' }),
     probeView(),
     el('p', { className: 'note', textContent: `Экран ${innerWidth}×${innerHeight}, браузер: ${navigator.userAgent}` }),
-    el('div', { className: 'actions' }, action('Очистить журнал', clearProbe, 'probe-clear')),
+    el('div', { className: 'actions' },
+      action('Отправить журнал', async () => {
+        try {
+          await api.report({ log: probeLog(), screen: `${innerWidth}×${innerHeight}@${devicePixelRatio}`, ua: navigator.userAgent, at: new Date().toISOString() });
+          toast('Журнал отправлен');
+        } catch (err) {
+          toast(err.message);
+        }
+      }, 'probe-send'),
+      action('Очистить журнал', clearProbe, 'probe-clear'),
+    ),
   );
   $('content').replaceChildren(
     el(
