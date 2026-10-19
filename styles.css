@@ -42,13 +42,14 @@ button {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) calc(env(safe-area-inset-left) + var(--dock));
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* CarPlay in APTV floats its own app dock over the left edge of the page;
-   app.js sets .carplay-dock there (or by the setting). */
+/* APTV keeps the page right of the CarPlay dock, but a fullscreen player covers
+   the whole screen and the dock floats over its left edge. app.js sets
+   .carplay-dock (APTV on CarPlay, or the setting) and .fullscreen. */
 :root { --dock: 0px; }
-:root.carplay-dock { --dock: calc(11vw + 6px); }
+:root.carplay-dock.fullscreen { --dock: calc(11vw + 6px); }
 
 /* ---------- top bar: sections + filters in one row ---------- */
 

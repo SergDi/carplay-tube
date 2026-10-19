@@ -154,6 +154,7 @@ let fullscreen = false;
 for (const type of ['fullscreenchange', 'webkitfullscreenchange']) {
   document.addEventListener(type, () => {
     const now = Boolean(document.fullscreenElement ?? document.webkitFullscreenElement);
+    document.documentElement.classList.toggle('fullscreen', now);
     if (fullscreen && !now && isOpen()) $('p-back').click();
     fullscreen = now;
   });

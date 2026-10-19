@@ -1,9 +1,9 @@
-import { api } from './api.js?v=f046875-mvfuhsjz';
-import { store } from './store.js?v=f046875-mvfuhsjz';
-import { DIRECTIONS, moveFocus } from './nav.js?v=f046875-mvfuhsjz';
-import * as player from './player.js?v=f046875-mvfuhsjz';
-import { probeView, clearProbe } from './probe.js?v=f046875-mvfuhsjz';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=f046875-mvfuhsjz';
+import { api } from './api.js?v=f92e843-mvfulmgb';
+import { store } from './store.js?v=f92e843-mvfulmgb';
+import { DIRECTIONS, moveFocus } from './nav.js?v=f92e843-mvfulmgb';
+import * as player from './player.js?v=f92e843-mvfulmgb';
+import { probeView, clearProbe } from './probe.js?v=f92e843-mvfulmgb';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=f92e843-mvfulmgb';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -22,8 +22,8 @@ let signIn = null; // pending device-code sign-in: {user_code, verification_url,
 
 const signedIn = () => Boolean(store.get().auth);
 
-// CarPlay floats its app dock over the left edge of APTV's browser. APTV says
-// who it is in the user agent; CarPlay screens are wide.
+// CarPlay floats its app dock over the left edge of a fullscreen player in APTV.
+// APTV says who it is in the user agent; CarPlay screens are wide.
 const inAptvCarPlay = () => /aptv/i.test(navigator.userAgent) && innerWidth > innerHeight * 1.3;
 
 function applyDock() {
@@ -536,8 +536,8 @@ function dockSection() {
   return el(
     'section',
     {},
-    el('h2', { textContent: 'Отступ под меню CarPlay' }),
-    el('p', { textContent: `Меню CarPlay висит поверх левого края. «Авто» сдвигает сайт вправо, когда он открыт в APTV на экране машины${inAptvCarPlay() ? ' — сейчас так и есть' : ''}.` }),
+    el('h2', { textContent: 'Отступ видео под меню CarPlay' }),
+    el('p', { textContent: `Видео на весь экран уходит под меню CarPlay слева. «Авто» сдвигает его вправо, когда сайт открыт в APTV на экране машины${inAptvCarPlay() ? ' — сейчас так и есть' : ''}.` }),
     el('div', { className: 'actions' }, option('auto', 'Авто'), option('on', 'Всегда'), option('off', 'Никогда')),
   );
 }
