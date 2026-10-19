@@ -1,8 +1,9 @@
-import { api } from './api.js?v=1e82deb-mvftk2yj';
-import { store } from './store.js?v=1e82deb-mvftk2yj';
-import { DIRECTIONS, moveFocus } from './nav.js?v=1e82deb-mvftk2yj';
-import * as player from './player.js?v=1e82deb-mvftk2yj';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=1e82deb-mvftk2yj';
+import { api } from './api.js?v=c14e786-mvftpsbg';
+import { store } from './store.js?v=c14e786-mvftpsbg';
+import { DIRECTIONS, moveFocus } from './nav.js?v=c14e786-mvftpsbg';
+import * as player from './player.js?v=c14e786-mvftpsbg';
+import { probeView, clearProbe } from './probe.js?v=c14e786-mvftpsbg';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=c14e786-mvftpsbg';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -560,15 +561,21 @@ function channelsSection() {
 
 function showSettings() {
   renderChips([]);
-  const keyProbe = el('p', { id: 'key-probe', className: 'probe', tabIndex: 0, textContent: 'Покрути или нажми шайбу — здесь появится, что получил сайт.' });
-  keyProbe.dataset.key = 'probe';
+  const probe = el(
+    'section',
+    {},
+    el('h2', { textContent: 'Проверка шайбы' }),
+    el('p', { textContent: 'Последние 12 событий, новые сверху. Сфотографируй экран после проверки.' }),
+    probeView(),
+    el('div', { className: 'actions' }, action('Очистить журнал', clearProbe, 'probe-clear')),
+  );
   $('content').replaceChildren(
     el(
       'div',
       { className: 'settings' },
       signInSection(),
       viewSection(),
-      el('section', {}, el('h2', { textContent: 'Проверка шайбы' }), keyProbe),
+      probe,
       channelsSection(),
     ),
   );
@@ -625,9 +632,6 @@ const BACK_KEYS = new Set(['Escape', 'GoBack', 'BrowserBack', 'Backspace']);
 document.addEventListener(
   'keydown',
   (e) => {
-    const probe = $('key-probe');
-    if (probe) probe.textContent = `Получено: ${e.shiftKey ? 'Shift+' : ''}${e.key} · code: ${e.code || '—'}`;
-
     const typing = e.target.matches?.('input, textarea');
 
     if (player.isOpen()) {
