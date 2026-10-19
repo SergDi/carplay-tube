@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=b052f8c-mvfvrljo';
-import { api } from './api.js?v=b052f8c-mvfvrljo';
-import { store } from './store.js?v=b052f8c-mvfvrljo';
-import { DIRECTIONS, moveFocus } from './nav.js?v=b052f8c-mvfvrljo';
-import * as player from './player.js?v=b052f8c-mvfvrljo';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=b052f8c-mvfvrljo';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=b052f8c-mvfvrljo';
+import { iosDesktopMode } from './aptv.js?v=b56c700-mvfw1dt3';
+import { api } from './api.js?v=b56c700-mvfw1dt3';
+import { store } from './store.js?v=b56c700-mvfw1dt3';
+import { DIRECTIONS, moveFocus } from './nav.js?v=b56c700-mvfw1dt3';
+import * as player from './player.js?v=b56c700-mvfw1dt3';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=b56c700-mvfw1dt3';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=b56c700-mvfw1dt3';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -66,6 +66,7 @@ function cardNode(card) {
     el('span', { className: 'title', textContent: card.title }),
     el('span', { className: 'meta', textContent: [card.channel, card.meta].filter(Boolean).join(' · ') }),
   );
+  btn.setAttribute('aria-label', `▶ ${card.title}${card.channel ? ` · ${card.channel}` : ''}${card.duration ? ` · ${card.duration}` : ''}`);
   btn.onclick = () => openVideo(card, btn);
   return btn;
 }

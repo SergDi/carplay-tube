@@ -52,3 +52,28 @@ new MutationObserver((records) => {
     if (document.activeElement !== el) el.focus({ preventScroll: true });
   }
 }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });
+
+// APTV's «Действия на странице» lists the page's buttons as a CarPlay list the
+// knob can turn through, but names them by attribute only (else «BUTTON»).
+// Give every button a name: its aria-label, or its visible text.
+function nameButtons() {
+  for (const b of document.querySelectorAll('button')) {
+    // A label we derived from the text follows the text (Пуск ↔ Пауза).
+    const own = b.hasAttribute('aria-label') && !b.dataset.named;
+    const name = ((own ? b.getAttribute('aria-label') : b.textContent) || '').trim().replace(/\s+/g, ' ');
+    if (!name || b.title === name) continue;
+    b.title = name;
+    b.value = name;
+    if (!own) {
+      b.setAttribute('aria-label', name);
+      b.dataset.named = '1';
+    }
+  }
+}
+
+let naming = 0;
+new MutationObserver(() => {
+  cancelAnimationFrame(naming);
+  naming = requestAnimationFrame(nameButtons);
+}).observe(document.body, { subtree: true, childList: true, characterData: true });
+nameButtons();
