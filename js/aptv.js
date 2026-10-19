@@ -41,16 +41,14 @@ if (iosDesktopMode) enterAptvMode();
 // APTV's knob highlight: `outline: 3px solid rgb(255, 64, 98) !important`.
 const APTV_RING = /rgb\(255,\s*64,\s*98\)/;
 
-// Mirror APTV's selection into real focus: our focus look replaces its red ring,
-// and everything that listens to focus (scrolling, loading more, the player's
-// controls) follows the knob.
+// Mirror APTV's selection into real focus, so everything that listens to focus
+// (scrolling, loading more, the player's controls) follows the knob. The ring
+// itself stays: APTV presses only the element that carries it.
 new MutationObserver((records) => {
   for (const r of records) {
     const el = r.target;
     if (!(el instanceof HTMLElement) || !APTV_RING.test(el.getAttribute('style') ?? '')) continue;
     if (!root.classList.contains('aptv')) enterAptvMode();
-    el.style.removeProperty('outline');
-    el.style.removeProperty('outline-offset');
-    if (document.activeElement !== el) el.focus();
+    if (document.activeElement !== el) el.focus({ preventScroll: true });
   }
 }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });

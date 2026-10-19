@@ -22,12 +22,24 @@ const mods = (e) => ['shift', 'alt', 'ctrl', 'meta'].filter((m) => e[`${m}Key`])
 // Measuring repeats on every knob step; keep one line per burst.
 let lastLine = '';
 
+let onChange = () => {};
+
 function add(line) {
   if (line === lastLine) return;
   lastLine = line;
   log.unshift(`${time()}  ${line}`);
   log.length = Math.min(log.length, MAX);
   if (view?.isConnected) view.textContent = log.join('\n');
+  onChange();
+}
+
+// Calls fn a few seconds after the journal stops changing.
+export function onProbeSettled(fn, delay = 4000) {
+  let timer = 0;
+  onChange = () => {
+    clearTimeout(timer);
+    timer = setTimeout(fn, delay);
+  };
 }
 
 export const probeLog = () => [...log];

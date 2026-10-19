@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=82aef29-mvfvmc3g';
-import { api } from './api.js?v=82aef29-mvfvmc3g';
-import { store } from './store.js?v=82aef29-mvfvmc3g';
-import { DIRECTIONS, moveFocus } from './nav.js?v=82aef29-mvfvmc3g';
-import * as player from './player.js?v=82aef29-mvfvmc3g';
-import { probeView, clearProbe, probeLog } from './probe.js?v=82aef29-mvfvmc3g';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=82aef29-mvfvmc3g';
+import { iosDesktopMode } from './aptv.js?v=b052f8c-mvfvrljo';
+import { api } from './api.js?v=b052f8c-mvfvrljo';
+import { store } from './store.js?v=b052f8c-mvfvrljo';
+import { DIRECTIONS, moveFocus } from './nav.js?v=b052f8c-mvfvrljo';
+import * as player from './player.js?v=b052f8c-mvfvrljo';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=b052f8c-mvfvrljo';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=b052f8c-mvfvrljo';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -561,6 +561,25 @@ function channelsSection() {
   );
 }
 
+const SESSION = Math.random().toString(36).slice(2, 10); // one journal per page load
+
+function sendReport() {
+  return api.report({
+    session: SESSION,
+    log: probeLog(),
+    screen: `${innerWidth}×${innerHeight}@${devicePixelRatio}`,
+    device: `screen ${screen.width}×${screen.height} · touch ${navigator.maxTouchPoints} · zoom ${document.documentElement.style.zoom || 1} · visual ${Math.round(visualViewport?.width ?? 0)}×${Math.round(visualViewport?.height ?? 0)}@${visualViewport?.scale ?? '?'} · hover ${matchMedia('(hover: hover)').matches} · coarse ${matchMedia('(pointer: coarse)').matches}`,
+    ua: navigator.userAgent,
+    at: new Date().toISOString(),
+  });
+}
+
+// In APTV the journal goes to the worker by itself once the knob rests, so a
+// session in the car needs no buttons pressed.
+onProbeSettled(() => {
+  if (document.documentElement.classList.contains('aptv')) sendReport().catch(() => {});
+});
+
 function showSettings() {
   renderChips([]);
   const probe = el(
@@ -573,13 +592,7 @@ function showSettings() {
     el('div', { className: 'actions' },
       action('Отправить журнал', async () => {
         try {
-          await api.report({
-            log: probeLog(),
-            screen: `${innerWidth}×${innerHeight}@${devicePixelRatio}`,
-            device: `screen ${screen.width}×${screen.height} · touch ${navigator.maxTouchPoints} · zoom ${document.documentElement.style.zoom || 1} · visual ${Math.round(visualViewport?.width ?? 0)}×${Math.round(visualViewport?.height ?? 0)}@${visualViewport?.scale ?? '?'} · hover ${matchMedia('(hover: hover)').matches} · coarse ${matchMedia('(pointer: coarse)').matches}`,
-            ua: navigator.userAgent,
-            at: new Date().toISOString(),
-          });
+          await sendReport();
           toast('Журнал отправлен');
         } catch (err) {
           toast(err.message);

@@ -232,7 +232,9 @@ async function localSubscriptions(request) {
 async function report(ctx, env) {
   const body = await ctx.request.text();
   if (body.length > 64_000) throw new HttpError(413, 'Слишком большой журнал');
-  const key = `report:${new Date().toISOString()}:${crypto.randomUUID().slice(0, 8)}`;
+  // A page sends its journal again as it grows: one key per page load.
+  const session = /"session":"([a-z0-9]{1,16})"/.exec(body)?.[1] ?? crypto.randomUUID().slice(0, 8);
+  const key = `report:${new Date().toISOString().slice(0, 10)}:${session}`;
   await env.REPORTS.put(key, body, { expirationTtl: 14 * 24 * 3600 });
   return { saved: key };
 }

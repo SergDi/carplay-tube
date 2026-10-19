@@ -38,6 +38,9 @@ button {
   outline-offset: 3px;
 }
 
+/* In APTV the knob draws its own red ring; ours would make two. */
+:root.aptv :focus { outline: none !important; }
+
 #app {
   display: flex;
   flex-direction: column;
