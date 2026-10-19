@@ -2,6 +2,7 @@ import { api } from './api.js';
 import { store } from './store.js';
 import { DIRECTIONS, moveFocus } from './nav.js';
 import * as player from './player.js';
+import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -15,7 +16,6 @@ const TABS = ['home', 'subs', 'search', 'settings'];
 let tab = TABS.includes(store.get().tab) ? store.get().tab : 'home';
 const chipByTab = { home: '', subs: '', search: '' };
 let query = '';
-let request = 0; // guards against a slow answer landing on a newer screen
 let returnFocus = null;
 let signIn = null; // pending device-code sign-in: {user_code, verification_url, timer}
 
@@ -67,33 +67,18 @@ function cardNode(card) {
   return btn;
 }
 
-function renderChips(chips, onPick) {
+function renderChips(chips) {
   const bar = $('chips');
   bar.replaceChildren(
     ...chips.map((c) => {
       const b = el('button', { type: 'button', className: 'chip', textContent: c.title });
       b.dataset.key = `chip:${c.title}`;
       b.setAttribute('aria-pressed', String(c.selected));
-      b.onclick = () => onPick(c.value ?? '');
+      b.onclick = () => pickChip(c.value ?? '');
       return b;
     }),
   );
   bar.hidden = chips.length === 0;
-}
-
-function rows(shelves) {
-  return el(
-    'div',
-    { className: 'rows' },
-    ...shelves.map((s) =>
-      el(
-        'section',
-        { className: 'row' },
-        el('h3', { textContent: s.title }),
-        el('div', { className: 'row-track' }, ...s.cards.map(cardNode)),
-      ),
-    ),
-  );
 }
 
 function message(title, text, ...actions) {
@@ -124,36 +109,201 @@ function skeleton() {
   return el('div', { className: 'grid' }, ...Array.from({ length: 6 }, () => el('div', { className: 'card skeleton' })));
 }
 
-async function loadFeed(loader, { onChip, empty, rowsAllowed = false }) {
-  const id = ++request;
-  const focusKey = document.activeElement?.closest('#chips') ? 'chip' : null;
+// One live feed per screen: what is loaded, what is drawn, how to get more.
+//  home / subs — YouTube TV shelves, filters applied here, more via /api/more;
+//  search — flat list with server-side filters, more via /api/search-more;
+//  local — channel RSS without an account, no more.
+let feed = null;
+
+const shelfFeed = () => feed.kind === 'home' || feed.kind === 'subs';
+const asRows = () => shelfFeed() && store.get().view === 'tv';
+
+function currentView() {
+  if (feed.kind === 'home') return homeView(feed.shelves, chipByTab.home);
+  if (feed.kind === 'subs') return subscriptionsView(feed.shelves, chipByTab.subs);
+  return { chips: feed.chips, items: feed.items, shelf: null };
+}
+
+function emptyMessage() {
+  if (feed.kind === 'search') return message('Ничего не нашлось', `По запросу «${query}» видео нет.`);
+  if (feed.kind === 'home') return message('Лента пуста', 'YouTube ничего не вернул.');
+  return message('Здесь пусто', 'По этому фильтру видео нет.');
+}
+
+function rowNode(shelf) {
+  const track = el('div', { className: 'row-track' }, ...shelf.cards.map(cardNode));
+  track.dataset.shelf = shelf.title;
+  feed.tracks.set(shelf.title, { track, drawn: new Set(shelf.cards.map((c) => c.id)) });
+  track.addEventListener('scroll', () => {
+    if (track.scrollLeft + track.clientWidth > track.scrollWidth - 400) loadMore({ shelf: shelf.title });
+  }, { passive: true });
+  return el('section', { className: 'row' }, el('h3', { textContent: shelf.title }), track);
+}
+
+function draw() {
+  feed.drawn = new Set();
+  feed.tracks = new Map();
+  if (asRows()) {
+    renderChips([]);
+    $('content').replaceChildren(el('div', { className: 'rows' }, ...feed.shelves.map(rowNode)));
+    return;
+  }
+  const view = currentView();
+  renderChips(view.chips);
+  view.items.forEach((c) => feed.drawn.add(c.id));
+  $('content').replaceChildren(
+    view.items.length ? el('div', { className: 'grid' }, ...view.items.map(cardNode)) : emptyMessage(),
+  );
+}
+
+// Adds what a «more» answer brought without touching what is on screen,
+// so the knob keeps its place. Returns how many cards appeared.
+function drawMore() {
+  if (asRows()) {
+    const rowsEl = $('content').querySelector('.rows');
+    let added = 0;
+    for (const s of feed.shelves) {
+      const t = feed.tracks.get(s.title);
+      if (!t) {
+        rowsEl.append(rowNode(s));
+        added += s.cards.length;
+        continue;
+      }
+      for (const c of s.cards) {
+        if (t.drawn.has(c.id)) continue;
+        t.drawn.add(c.id);
+        t.track.append(cardNode(c));
+        added++;
+      }
+    }
+    return added;
+  }
+  const view = currentView();
+  if (feed.kind === 'home') keepFocus(() => renderChips(view.chips));
+  const fresh = view.items.filter((c) => !feed.drawn.has(c.id));
+  if (!fresh.length) return 0;
+  let grid = $('content').querySelector('.grid');
+  if (!grid) {
+    grid = el('div', { className: 'grid' });
+    $('content').replaceChildren(grid);
+  }
+  for (const c of fresh) {
+    feed.drawn.add(c.id);
+    grid.append(cardNode(c));
+  }
+  return fresh.length;
+}
+
+function loadingTail(on) {
+  $('content').querySelector('.more-tail')?.remove();
+  if (on) $('content').append(el('p', { className: 'more-tail', textContent: 'Загружаю ещё…' }));
+}
+
+// hint.shelf: the viewer reached the end of that shelf (a TV row or a picked home filter).
+async function loadMore(hint = {}, depth = 0) {
+  const f = feed;
+  if (!f || f.loading || depth > 2) return;
+  let request;
+  if (f.kind === 'search') {
+    if (!f.next) return;
+    request = api.searchMore(f.next).then((r) => {
+      f.items = dedupe([...f.items, ...(r.items ?? [])]);
+      f.next = r.next ?? null;
+    });
+  } else if (shelfFeed()) {
+    const shelf = hint.shelf != null ? f.shelves.find((s) => s.title === hint.shelf) : null;
+    if (shelf?.next) {
+      request = api.more(shelf.next, f.kind).then((r) => {
+        shelf.cards = dedupe([...shelf.cards, ...(r.cards ?? [])]);
+        shelf.next = r.next ?? null;
+      });
+    } else if (f.next) {
+      // A shelf without its own continuation grows from the next page (fresh uploads do).
+      request = api.more(f.next, f.kind).then((r) => {
+        f.shelves = mergeShelves(r.shelves ?? [], f.shelves);
+        f.next = r.next ?? null;
+      });
+    } else return;
+  } else return;
+
+  f.loading = true;
+  loadingTail(!asRows() || hint.shelf == null);
+  try {
+    await request;
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    f.loading = false;
+  }
+  if (f !== feed) return;
+  loadingTail(false);
+  // A filter may find nothing new on a page; look one page further.
+  if (drawMore() === 0) loadMore(hint, depth + 1);
+}
+
+function gridHint() {
+  if (feed?.kind !== 'home' || asRows()) return {};
+  const picked = currentView().shelf;
+  return picked ? { shelf: picked.title } : {};
+}
+
+// The knob reached one of the last cards: fetch more before it hits the end.
+function maybeMore(target) {
+  if (!feed || !target?.classList?.contains('card') || !$('content').contains(target)) return;
+  const track = target.closest('.row-track');
+  if (track) {
+    const cards = [...track.children];
+    if (cards.indexOf(target) >= cards.length - 3) loadMore({ shelf: track.dataset.shelf });
+    const rowsAll = [...$('content').querySelectorAll('.row')];
+    if (rowsAll.indexOf(track.closest('.row')) >= rowsAll.length - 2) loadMore();
+    return;
+  }
+  const cards = [...(target.closest('.grid')?.children ?? [])];
+  if (cards.indexOf(target) >= cards.length - 6) loadMore(gridHint());
+}
+
+$('main').addEventListener('scroll', () => {
+  const m = $('main');
+  if (feed && m.scrollTop + m.clientHeight > m.scrollHeight - 400) loadMore(gridHint());
+}, { passive: true });
+
+async function startFeed(kind, loader, { focusResults = false } = {}) {
+  const f = (feed = { kind, shelves: [], next: null, items: [], chips: [], loading: false, drawn: new Set(), tracks: new Map() });
+  const chipFocused = Boolean(document.activeElement?.closest('#chips'));
   $('content').replaceChildren(skeleton());
   try {
     const data = await loader();
-    if (id !== request) return;
-    const asRows = rowsAllowed && store.get().view === 'tv' && data.shelves?.length;
-    renderChips(asRows ? [] : data.chips ?? [], onChip);
-    if (focusKey) $('chips').querySelector('[aria-pressed="true"]')?.focus();
-    const items = data.items ?? [];
-    $('content').replaceChildren(
-      asRows ? rows(data.shelves) : items.length ? el('div', { className: 'grid' }, ...items.map(cardNode)) : empty(),
-    );
+    if (f !== feed) return;
+    f.shelves = data.shelves ?? [];
+    f.next = data.next ?? null;
+    f.items = data.items ?? [];
+    f.chips = data.chips ?? [];
+    draw();
+    if (chipFocused) $('chips').querySelector('[aria-pressed="true"]')?.focus();
+    else if (focusResults) $('content').querySelector('.card')?.focus();
   } catch (err) {
-    if (id !== request) return;
+    if (f !== feed) return;
     if (err.status === 401 && signedIn()) store.set({ auth: null });
+    renderChips([]);
     $('content').replaceChildren(
-      message(
-        'Не получилось загрузить',
-        err.message,
-        action('Повторить', () => loadFeed(loader, { onChip, empty, rowsAllowed })),
-      ),
+      message('Не получилось загрузить', err.message, action('Повторить', () => startFeed(kind, loader, { focusResults }))),
     );
   }
 }
 
+function pickChip(value) {
+  chipByTab[tab] = value;
+  if (feed && shelfFeed()) {
+    draw();
+    $('chips').querySelector('[aria-pressed="true"]')?.focus();
+    $('main').scrollTop = 0;
+  } else if (tab === 'search') runSearch(false);
+  else showSubs();
+}
+
 function showHome() {
   if (!signedIn()) {
-    renderChips([], null);
+    renderChips([]);
     $('content').replaceChildren(
       message(
         'Главная появится после входа',
@@ -164,20 +314,17 @@ function showHome() {
     );
     return;
   }
-  loadFeed(() => api.home(chipByTab.home), {
-    rowsAllowed: true,
-    onChip: (v) => {
-      chipByTab.home = v;
-      showHome();
-    },
-    empty: () => message('Лента пуста', 'YouTube ничего не вернул.'),
-  });
+  startFeed('home', () => api.home());
 }
 
 function showSubs() {
   const { channels } = store.get();
-  if (!signedIn() && channels.length === 0) {
-    renderChips([], null);
+  if (signedIn()) {
+    startFeed('subs', () => api.subscriptions());
+    return;
+  }
+  if (channels.length === 0) {
+    renderChips([]);
     $('content').replaceChildren(
       message(
         'Пока нет подписок',
@@ -187,17 +334,7 @@ function showSubs() {
     );
     return;
   }
-  const loader = signedIn()
-    ? () => api.subscriptions(chipByTab.subs)
-    : () => api.localSubscriptions(channels.map((c) => c.id), chipByTab.subs || 'Все');
-  loadFeed(loader, {
-    rowsAllowed: signedIn(),
-    onChip: (v) => {
-      chipByTab.subs = v;
-      showSubs();
-    },
-    empty: () => message('Здесь пусто', 'По этому фильтру видео нет.'),
-  });
+  startFeed('local', () => api.localSubscriptions(channels.map((c) => c.id), chipByTab.subs || 'Все'));
 }
 
 // ---------- search ----------
@@ -227,7 +364,7 @@ function showSearch() {
     runSearch(false);
     return;
   }
-  renderChips([], null);
+  renderChips([]);
   const recent = store.get().recent;
   $('content').replaceChildren(
     recent.length
@@ -246,15 +383,7 @@ function showSearch() {
 }
 
 function runSearch(focusResults) {
-  loadFeed(() => api.search(query, chipByTab.search), {
-    onChip: (v) => {
-      chipByTab.search = v;
-      runSearch(false);
-    },
-    empty: () => message('Ничего не нашлось', `По запросу «${query}» видео нет.`),
-  }).then(() => {
-    if (focusResults) $('content').querySelector('.card')?.focus();
-  });
+  startFeed('search', () => api.search(query, chipByTab.search), { focusResults });
 }
 
 // ---------- sign-in ----------
@@ -430,7 +559,7 @@ function channelsSection() {
 }
 
 function showSettings() {
-  renderChips([], null);
+  renderChips([]);
   const keyProbe = el('p', { id: 'key-probe', className: 'probe', tabIndex: 0, textContent: 'Покрути или нажми шайбу — здесь появится, что получил сайт.' });
   keyProbe.dataset.key = 'probe';
   $('content').replaceChildren(
@@ -458,7 +587,7 @@ function channelRow(c, label, fn, key) {
 // ---------- screens ----------
 
 function show() {
-  request++;
+  feed = null;
   renderRail();
   $('search-bar').hidden = tab !== 'search';
   $('main').dataset.tab = tab;
@@ -542,6 +671,7 @@ document.addEventListener(
 // smooth: the next knob step measures positions right away.
 document.addEventListener('focusin', (e) => {
   e.target.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  maybeMore(e.target);
 });
 
 show();

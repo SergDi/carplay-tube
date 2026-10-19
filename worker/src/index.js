@@ -1,6 +1,7 @@
 import { Innertube, ClientType, Mixins, YTNodes } from 'youtubei.js/cf-worker';
 import { toCards, parseChannelRss, filterLocalSubs, LOCAL_SUB_FILTERS } from './cards.js';
-import { homeView, subscriptionsView, subscribedChannels, shelves, sectionNext, shelfPage, mergeShelves } from './tv.js';
+import { subscribedChannels, shelves, sectionNext, shelfPage } from './tv.js';
+import { mergeShelves } from '../../js/feeds.js';
 
 // Stateless bridge between the CarPlay site and YouTube.
 // Signed-in viewers sign in the way a TV does (code on google.com/device); their
@@ -68,13 +69,18 @@ async function tvBrowse(ctx, browseId) {
 const PAGES = 3; // pages of shelves; the TV app loads them as you scroll down
 const MAX_SHELF_EXTENSIONS = 12;
 
-// The TV surface hands out ~4 shelves of 5 tiles at a time. Collect a few pages
-// and one more stretch of every shelf so a screen has enough to walk through.
-async function tvShelves(ctx, browseId) {
-  const yt = await tv(ctx);
-  const browse = async (params) => (await yt.actions.execute('/browse', { ...params, client: 'TV' })).data;
+// Untitled shelves: on Subscriptions they hold fresh uploads, on Home a mixed bag.
+const UNTITLED = { home: 'Ещё для вас', subs: 'Новые видео' };
+const named = (kind) => (s) => ({ ...s, title: s.title || UNTITLED[kind] });
+
+const tvBrowser = (yt) => async (params) => (await yt.actions.execute('/browse', { ...params, client: 'TV' })).data;
+
+// The TV surface hands out ~4 shelves of 5 tiles at a time. The first answer
+// collects a few pages and one more stretch of every shelf; the site asks
+// /api/more with the returned tokens as the viewer scrolls further.
+async function tvFeed(ctx, browseId, kind) {
+  const browse = tvBrowser(await tv(ctx));
   let page = await browse({ browseId });
-  const first = page;
   const list = shelves(page);
   for (let i = 1; i < PAGES; i++) {
     const token = sectionNext(page);
@@ -85,83 +91,23 @@ async function tvShelves(ctx, browseId) {
   await Promise.all(
     list.filter((s) => s.next).slice(0, MAX_SHELF_EXTENSIONS).map(async (s) => {
       try {
-        s.cards.push(...shelfPage(await browse({ continuation: s.next })).cards);
+        const more = shelfPage(await browse({ continuation: s.next }));
+        s.cards.push(...more.cards);
+        s.next = more.next;
       } catch {
         // A shelf that fails to extend keeps its first tiles.
       }
     }),
   );
-  return { first, list };
+  return { shelves: mergeShelves(list.map(named(kind))), next: sectionNext(page) };
 }
 
-// ---------- sign-in (device flow) ----------
-
-const TOKEN_URL = 'https://www.youtube.com/o/oauth2/token';
-
-async function authStart() {
-  const yt = await web();
-  const oauth = yt.session.oauth;
-  oauth.client_id = await oauth.getClientID();
-  const code = await oauth.getDeviceAndUserCode();
-  return {
-    user_code: code.user_code,
-    verification_url: code.verification_url,
-    device_code: code.device_code,
-    interval: code.interval,
-    expires_in: code.expires_in,
-    client: oauth.client_id,
-  };
-}
-
-async function authPoll(request) {
-  const { device_code, client } = await request.json().catch(() => ({}));
-  if (!device_code || !client?.client_id) throw new HttpError(400, 'Нет кода входа');
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: client.client_id,
-      client_secret: client.client_secret,
-      code: device_code,
-      grant_type: 'http://oauth.net/grant_type/device/1.0',
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (data.error === 'authorization_pending' || data.error === 'slow_down') return { pending: true };
-  if (data.error === 'access_denied') throw new HttpError(403, 'Вход отклонён');
-  if (data.error === 'expired_token') throw new HttpError(410, 'Код устарел — начни вход заново');
-  if (data.error || !data.access_token) throw new HttpError(502, 'Google не выдал вход');
-  return {
-    tokens: {
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      token_type: data.token_type,
-      scope: data.scope,
-      expiry_date: new Date(Date.now() + data.expires_in * 1000).toISOString(),
-      client,
-    },
-  };
-}
-
-// ---------- feeds ----------
-
-async function homeFeed(ctx, url) {
-  const list = mergeShelves((await tvShelves(ctx, 'FEwhat_to_watch')).list);
-  return { ...homeView(list, url.searchParams.get('chip')), shelves: list.filter((s) => s.title) };
-}
-
-async function subscriptionsFeed(ctx, url) {
-  const { list } = await tvShelves(ctx, 'FEsubscriptions');
-  // The TV page splits fresh uploads into small untitled shelves; show them as one row.
-  const rows = [];
-  let fresh = null;
-  for (const s of list) {
-    if (s.title) rows.push(s);
-    else if (fresh) fresh.cards.push(...s.cards);
-    else rows.push((fresh = { title: 'Новые видео', cards: [...s.cards] }));
-  }
-  const merged = mergeShelves(rows);
-  return { ...subscriptionsView(merged, url.searchParams.get('chip')), shelves: merged };
+async function moreFeed(ctx) {
+  const { token, kind } = await ctx.request.json().catch(() => ({}));
+  if (!token) throw new HttpError(400, 'Нет продолжения');
+  const data = await tvBrowser(await tv(ctx))({ continuation: token });
+  if (data.continuationContents?.horizontalListContinuation) return shelfPage(data);
+  return { shelves: mergeShelves(shelves(data).map(named(kind === 'home' ? 'home' : 'subs'))), next: sectionNext(data) };
 }
 
 async function myChannels(ctx) {
@@ -189,12 +135,23 @@ async function applyChip(yt, feed, raw) {
   return { chips: titles, feed: new Mixins.Feed(yt.actions, response, true) };
 }
 
+const continuationOf = (feed) =>
+  feed.memo.getType(YTNodes.ContinuationItem).map((c) => c.endpoint?.payload?.token).find(Boolean) ?? null;
+
 async function search(url) {
   const q = (url.searchParams.get('q') ?? '').trim();
   if (!q) throw new HttpError(400, 'Пустой запрос');
   const yt = await web();
   const { chips, feed } = await applyChip(yt, await yt.search(q), url.searchParams.get('chip'));
-  return { chips, items: toCards(feed.videos) };
+  return { chips, items: toCards(feed.videos), next: continuationOf(feed) };
+}
+
+async function searchMore(request) {
+  const { token } = await request.json().catch(() => ({}));
+  if (!token) throw new HttpError(400, 'Нет продолжения');
+  const yt = await web();
+  const feed = new Mixins.Feed(yt.actions, await yt.actions.execute('/search', { continuation: token, parse: true }), true);
+  return { items: toCards(feed.videos), next: continuationOf(feed) };
 }
 
 const CHANNEL_TABS = {
@@ -273,8 +230,10 @@ async function localSubscriptions(request) {
 const ROUTES = {
   'POST /api/auth/start': () => authStart(),
   'POST /api/auth/poll': (ctx) => authPoll(ctx.request),
-  'GET /api/home': (ctx) => homeFeed(ctx, ctx.url),
-  'GET /api/subscriptions': (ctx) => subscriptionsFeed(ctx, ctx.url),
+  'GET /api/home': (ctx) => tvFeed(ctx, 'FEwhat_to_watch', 'home'),
+  'GET /api/subscriptions': (ctx) => tvFeed(ctx, 'FEsubscriptions', 'subs'),
+  'POST /api/more': (ctx) => moreFeed(ctx),
+  'POST /api/search-more': (ctx) => searchMore(ctx.request),
   'GET /api/my-channels': (ctx) => myChannels(ctx),
   'GET /api/search': (ctx) => search(ctx.url),
   'GET /api/channel': (ctx) => channel(ctx.url),

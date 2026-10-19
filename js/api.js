@@ -30,8 +30,10 @@ async function call(path, { method = 'GET', body, params } = {}) {
 export const api = {
   authStart: () => call('/api/auth/start', { method: 'POST' }),
   authPoll: (device_code, client) => call('/api/auth/poll', { method: 'POST', body: { device_code, client } }),
-  home: (chip) => call('/api/home', { params: { chip } }),
-  subscriptions: (chip) => call('/api/subscriptions', { params: { chip } }),
+  home: () => call('/api/home'),
+  subscriptions: () => call('/api/subscriptions'),
+  more: (token, kind) => call('/api/more', { method: 'POST', body: { token, kind } }),
+  searchMore: (token) => call('/api/search-more', { method: 'POST', body: { token } }),
   localSubscriptions: (channels, filter) =>
     call('/api/local-subscriptions', { method: 'POST', body: { channels, filter } }),
   search: (q, chip) => call('/api/search', { params: { q, chip } }),

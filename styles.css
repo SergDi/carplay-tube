@@ -338,6 +338,12 @@ textarea {
   letter-spacing: 0.08em;
 }
 
+.more-tail {
+  margin: 20px 0;
+  text-align: center;
+  color: var(--muted);
+}
+
 .probe {
   padding: 16px;
   border-radius: var(--radius);
@@ -440,7 +446,6 @@ textarea {
 .pbtn.primary { background: var(--text); color: #000; }
 .pbtn[data-state="playing"] .i-play, .pbtn[data-state="paused"] .i-pause { display: none; }
 
-#p-sound { background: var(--accent); }
 #p-top { padding-right: 150px; }
 #p-time { position: absolute; top: 20px; right: 28px; color: var(--muted); font-size: 20px; font-variant-numeric: tabular-nums; }
 
@@ -453,7 +458,7 @@ textarea {
 @media (max-height: 520px) {
   #main { padding-top: 12px; }
   .pbtn span { display: none; }
-  .pbtn.primary span, #p-sound span, #p-back span { display: inline; }
+  .pbtn.primary span, #p-back span { display: inline; }
   #rail button span { font-size: 12px; }
 }
 

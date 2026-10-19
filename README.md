@@ -18,6 +18,8 @@ Settings → «Войти» signs in the way a YouTube TV app does: the site sho
 - Subscriptions: Все / Видео / Shorts / Трансляции / Продолжить просмотр.
 - Settings → «Вид»: «Телефон» shows filters and a grid, «TV» shows the shelves as rows.
 
+The first answer carries three pages of shelves; near the end of the grid, a row or the search results the site asks `/api/more` (`/api/search-more`) with YouTube's continuation token and appends what comes back. Filters on Home and Subscriptions are applied on the device (`js/feeds.js`, shared with the worker).
+
 ## Controls
 
 | Key | Action |
@@ -27,7 +29,7 @@ Settings → «Войти» signs in the way a YouTube TV app does: the site sho
 | Enter | open, press |
 | Escape / Backspace | back from the player |
 
-In the player the first key only shows the controls; they hide after 4 s of playback. The YouTube iframe never takes focus. If the browser refuses to start sound by itself, the video starts muted and «Включить звук» is focused.
+In the player the first key only shows the controls; they hide after 4 s of playback. The YouTube iframe never takes focus. If the browser refuses to start the video by itself, «Пуск» is focused; one press starts it with sound.
 
 Real browser fullscreen is requested when a video opens; browsers inside apps on iPhone usually refuse it, and the player already fills the page.
 

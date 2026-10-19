@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tileToCard, homeView, subscriptionsView, subscribedChannels, shelves, mergeShelves } from '../worker/src/tv.js';
+import { tileToCard, subscribedChannels, shelves } from '../worker/src/tv.js';
+import { homeView, subscriptionsView, mergeShelves } from '../js/feeds.js';
 
 const video = (id, extra = {}) => ({
   tileRenderer: {
@@ -70,10 +71,10 @@ test('Shorts tile takes its title from the thumbnail overlay', () => {
   assert.equal(card.thumb, 'https://i.ytimg.com/vi/x/oar2.jpg');
 });
 
-test('home: titled shelves become filters, «Все» dedupes', () => {
+test('home: shelves become filters, «Все» dedupes', () => {
   const all = homeView(shelves(page), '');
-  assert.deepEqual(all.chips.map((c) => c.title), ['Все', 'Рекомендованные', 'Shorts']);
-  assert.equal(all.items.length, 3);
+  assert.deepEqual(all.chips.map((c) => c.title), ['Все', 'Рекомендованные', 'Shorts', '']);
+  assert.equal(all.items.length, 4);
   assert.deepEqual(homeView(shelves(page), '1').items.map((c) => c.id), ['sssssssssss']);
 });
 
@@ -106,4 +107,11 @@ test('shelves with the same title from later pages merge without repeats', () =>
     { title: 'Shorts', cards: [{ id: 'b' }, { id: 'd' }] },
   ]);
   assert.deepEqual(merged.map((s) => [s.title, s.cards.map((c) => c.id)]), [['Shorts', ['a', 'b', 'd']], ['', ['c']]]);
+});
+
+test('merging into loaded shelves keeps the newest continuation token', () => {
+  const loaded = [{ title: 'Shorts', cards: [{ id: 'a' }], next: 't1' }];
+  const merged = mergeShelves([{ title: 'Shorts', cards: [{ id: 'b' }], next: 't2' }, { title: 'New', cards: [{ id: 'c' }], next: null }], loaded);
+  assert.deepEqual(merged.map((s) => [s.title, s.cards.length, s.next]), [['Shorts', 2, 't2'], ['New', 1, null]]);
+  assert.equal(loaded[0].cards.length, 1);
 });

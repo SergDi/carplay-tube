@@ -43,7 +43,6 @@ function tick() {
   const playing = yt.getPlayerState() === YT.PlayerState.PLAYING;
   $('p-play').querySelector('span').textContent = playing ? 'Пауза' : 'Пуск';
   $('p-play').dataset.state = playing ? 'playing' : 'paused';
-  $('p-sound').hidden = !yt.isMuted();
 }
 
 export function isOpen() {
@@ -63,7 +62,7 @@ export function showOverlay(focus) {
   clearInterval(tickTimer);
   tickTimer = setInterval(tick, 500);
   tick();
-  if (wasHidden || focus) (focus ?? ($('p-sound').hidden ? $('p-play') : $('p-sound'))).focus();
+  if (wasHidden || focus) (focus ?? $('p-play')).focus();
 }
 
 export function hideOverlay() {
@@ -110,7 +109,7 @@ function create(card) {
         tick();
       },
       onAutoplayBlocked() {
-        mutedFallback();
+        autoplayRefused();
       },
       onError(e) {
         const why = e.data === 101 || e.data === 150
@@ -123,14 +122,12 @@ function create(card) {
   });
 }
 
-// Browsers in apps often refuse to start sound on their own; muted playback is
-// allowed, and the first knob press turns the sound on.
-function mutedFallback() {
+// Browsers in apps may refuse to start a video on their own: then the knob
+// lands on «Пуск» and one press starts it, with sound.
+function autoplayRefused() {
   if (!ready || yt.getPlayerState() === YT.PlayerState.PLAYING) return;
-  yt.mute();
-  yt.playVideo();
-  status('Видео без звука — нажми «Включить звук».');
-  showOverlay($('p-sound'));
+  status('Нажми «Пуск»');
+  showOverlay($('p-play'));
 }
 
 function start(card) {
@@ -138,7 +135,7 @@ function start(card) {
   yt.unMute();
   yt.loadVideoById(card.id);
   clearTimeout(autoplayCheck);
-  autoplayCheck = setTimeout(mutedFallback, 2500);
+  autoplayCheck = setTimeout(autoplayRefused, 5000);
 }
 
 function tryFullscreen() {
@@ -209,19 +206,15 @@ export function bindControls(back) {
   $('p-play').onclick = () => {
     if (!ready) return;
     if (yt.getPlayerState() === YT.PlayerState.PLAYING) yt.pauseVideo();
-    else yt.playVideo();
+    else {
+      yt.unMute();
+      yt.playVideo();
+      status('');
+    }
     tick();
   };
   $('p-rew').onclick = () => ready && yt.seekTo(Math.max(0, yt.getCurrentTime() - 10), true);
   $('p-fwd').onclick = () => ready && yt.seekTo(yt.getCurrentTime() + 30, true);
-  $('p-sound').onclick = () => {
-    if (!ready) return;
-    yt.unMute();
-    yt.setVolume(100);
-    status('');
-    tick();
-    $('p-play').focus();
-  };
   $('player').addEventListener('click', (e) => {
     if (e.target === $('player') || e.target.id === 'p-shield') showOverlay();
   });
