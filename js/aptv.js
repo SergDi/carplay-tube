@@ -3,8 +3,8 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=f62ca6c-mvfxd4os';
-import { probeNote } from './probe.js?v=f62ca6c-mvfxd4os';
+import { focusables, pickNext } from './nav.js?v=7c86cfb-mvfy6c8r';
+import { probeNote } from './probe.js?v=7c86cfb-mvfy6c8r';
 
 const root = document.documentElement;
 
@@ -61,6 +61,7 @@ const sensors = [];
 const role = new Map();
 let center = null;
 let laying = 0;
+let viewportBox = null;
 
 const player = () => document.getElementById('player');
 const playerOpen = () => !player().hidden;
@@ -117,11 +118,17 @@ function layout() {
     place(center, r.left - 5, r.top - 5, r.width + 10, r.height + 10);
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
+    // Off-screen sensors are not candidates for APTV: keep them on screen, and for
+    // a control as big as the screen (the video) put them inside its edges.
+    // The screen in the same units as the rects (zoom makes innerWidth unreliable).
+    const { width: W, height: H } = viewportBox.getBoundingClientRect();
+    const clampX = (x) => Math.min(Math.max(x, 4), W - 28);
+    const clampY = (y) => Math.min(Math.max(y, 4), H - 28);
     const spots = {
-      up: [cx - 12, r.top - GAP - 12],
-      down: [cx - 12, r.bottom + GAP - 12],
-      left: [r.left - GAP - 12, cy - 12],
-      right: [r.right + GAP - 12, cy - 12],
+      up: [clampX(cx - 12), clampY(r.top - GAP - 12)],
+      down: [clampX(cx - 12), clampY(r.bottom + GAP - 12)],
+      left: [clampX(r.left - GAP - 12), clampY(cy - 12)],
+      right: [clampX(r.right + GAP - 12), clampY(cy - 12)],
     };
     role.clear();
     const free = sensors.filter((s) => s !== center);
@@ -173,6 +180,9 @@ function startSensors() {
     sensors.push(b);
   }
   center = sensors[0];
+  viewportBox = document.createElement('div');
+  viewportBox.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none';
+  document.body.append(viewportBox);
   addEventListener('scroll', layout, { capture: true, passive: true });
   addEventListener('resize', layout);
   document.addEventListener('focusin', layout);
