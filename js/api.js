@@ -1,5 +1,5 @@
-import { API_BASE } from './config.js?v=755b17e-mvfyuy2u';
-import { store } from './store.js?v=755b17e-mvfyuy2u';
+import { API_BASE } from './config.js?v=68b24f9-mvfywnv0';
+import { store } from './store.js?v=68b24f9-mvfywnv0';
 
 async function call(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`${API_BASE}${path}`);
@@ -39,5 +39,4 @@ export const api = {
     call('/api/local-subscriptions', { method: 'POST', body: { channels, filter } }),
   search: (q, chip) => call('/api/search', { params: { q, chip } }),
   channelSearch: (q) => call('/api/channel-search', { params: { q } }),
-  myChannels: () => call('/api/my-channels'),
 };

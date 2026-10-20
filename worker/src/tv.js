@@ -79,22 +79,3 @@ export function shelfPage(data) {
   const list = c.horizontalListContinuation ?? c.gridContinuation ?? c.playlistVideoListContinuation ?? {};
   return { cards: walk(list.items ?? [], 'tileRenderer').map(tileToCard).filter(Boolean), next: nextToken(list.continuations) };
 }
-
-// The TV subscriptions page lists every channel as a side tab; the channel id
-// sits inside the tab's base64 protobuf params.
-export function subscribedChannels(data) {
-  return walk(data, 'tabRenderer')
-    .map((tab) => {
-      const params = tab.endpoint?.browseEndpoint?.params ?? '';
-      let id = '';
-      try {
-        const raw = atob(decodeURIComponent(params).replace(/-/g, '+').replace(/_/g, '/'));
-        id = raw.match(/UC[\w-]{22}/)?.[0] ?? '';
-      } catch {
-        // Not a channel tab.
-      }
-      const thumbs = tab.thumbnail?.thumbnails ?? [];
-      return { id, name: text(tab.title), avatar: absolute(thumbs[thumbs.length - 1]?.url) };
-    })
-    .filter((c) => c.id);
-}

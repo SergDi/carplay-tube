@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tileToCard, subscribedChannels, shelves } from '../worker/src/tv.js';
+import { tileToCard, shelves } from '../worker/src/tv.js';
 import { homeView, subscriptionsView, mergeShelves } from '../js/feeds.js';
 
 const video = (id, extra = {}) => ({
@@ -93,19 +93,6 @@ test('subscriptions filters', () => {
   assert.deepEqual(ids('Видео'), ['aaaaaaaaaaa', 'bbbbbbbbbbb']);
 });
 
-test('channel id is read from the tab params', () => {
-  const tabs = { tabs: [
-    { tabRenderer: { title: 'Все', endpoint: { browseEndpoint: { browseId: 'FEsubscriptions' } } } },
-    { tabRenderer: {
-      title: 'Історія',
-      endpoint: { browseEndpoint: { params: 'igMaChhVQ1h4M3lWeDlwYVdKLUJMWlZxUThDUlE%3D' } },
-      thumbnail: { thumbnails: [{ url: '//yt3.googleusercontent.com/a=s48' }] },
-    } },
-  ] };
-  assert.deepEqual(subscribedChannels(tabs), [
-    { id: 'UCXx3yVx9paWJ-BLZVqQ8CRQ', name: 'Історія', avatar: 'https://yt3.googleusercontent.com/a=s48' },
-  ]);
-});
 
 test('shelves with the same title from later pages merge without repeats', () => {
   const merged = mergeShelves([

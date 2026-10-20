@@ -1,9 +1,9 @@
-import { iosDesktopMode, applyUiSize } from './aptv.js?v=755b17e-mvfyuy2u';
-import { api } from './api.js?v=755b17e-mvfyuy2u';
-import { store } from './store.js?v=755b17e-mvfyuy2u';
-import { DIRECTIONS, moveFocus } from './nav.js?v=755b17e-mvfyuy2u';
-import * as player from './player.js?v=755b17e-mvfyuy2u';
-import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=755b17e-mvfyuy2u';
+import { iosDesktopMode, applyUiSize } from './aptv.js?v=68b24f9-mvfywnv0';
+import { api } from './api.js?v=68b24f9-mvfywnv0';
+import { store } from './store.js?v=68b24f9-mvfywnv0';
+import { DIRECTIONS, moveFocus } from './nav.js?v=68b24f9-mvfywnv0';
+import * as player from './player.js?v=68b24f9-mvfywnv0';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=68b24f9-mvfywnv0';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -594,25 +594,13 @@ function channelsSection() {
       found.replaceChildren(el('p', { textContent: err.message }));
     }
   };
-  const importBtn = signedIn() ? action('Забрать все каналы из аккаунта', async () => {
-    try {
-      const { channels: mine } = await api.myChannels();
-      const known = new Set(store.get().channels.map((c) => c.id));
-      store.set({ channels: [...store.get().channels, ...mine.filter((c) => !known.has(c.id))] });
-      toast(`Каналов: ${store.get().channels.length}`);
-      keepFocus(showSettings);
-    } catch (err) {
-      toast(err.message);
-    }
-  }, 'import') : null;
   return el(
     'section',
     {},
     el('h2', { textContent: `Каналы без входа (${channels.length})` }),
-    el('p', { textContent: 'Их новые видео показываются в «Подписках», когда ты не вошёл.' }),
+    el('p', { textContent: 'Без входа «Подписки» собираются из новых видео этих каналов.' }),
     channelForm,
     found,
-    importBtn ? el('div', { className: 'actions' }, importBtn) : null,
     el('div', { className: 'channel-list' }, ...channels.map((c, i) => channelRow(c, 'Убрать', () => {
       store.set({ channels: store.get().channels.filter((x) => x.id !== c.id) });
       const next = channels[i + 1] ?? channels[i - 1];
@@ -631,7 +619,8 @@ function showSettings() {
       signInSection(),
       viewSection(),
       sizeSection(),
-      channelsSection(),
+      // A hand-made channel list replaces Subscriptions only for viewers who are not signed in.
+      signedIn() ? null : channelsSection(),
     ),
   );
 }

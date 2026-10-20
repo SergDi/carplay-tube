@@ -1,6 +1,6 @@
 import { Innertube, ClientType, Mixins, YTNodes } from 'youtubei.js/cf-worker';
 import { toCards, parseChannelRss, filterLocalSubs, LOCAL_SUB_FILTERS } from './cards.js';
-import { subscribedChannels, shelves, sectionNext, shelfPage } from './tv.js';
+import { shelves, sectionNext, shelfPage } from './tv.js';
 import { mergeShelves } from '../../js/feeds.js';
 
 // Stateless bridge between the CarPlay site and YouTube.
@@ -148,9 +148,6 @@ async function moreFeed(ctx) {
   return { shelves: mergeShelves(await nameUntitled(shelves(data).map(named(kind === 'home' ? 'home' : 'subs')))), next: sectionNext(data) };
 }
 
-async function myChannels(ctx) {
-  return { channels: subscribedChannels(await tvBrowse(ctx, 'FEsubscriptions')) };
-}
 
 function chipsOf(feed) {
   const memo = feed.memo;
@@ -273,7 +270,6 @@ const ROUTES = {
   'GET /api/topic': (ctx) => topicFeed(ctx),
   'POST /api/more': (ctx) => moreFeed(ctx),
   'POST /api/search-more': (ctx) => searchMore(ctx.request),
-  'GET /api/my-channels': (ctx) => myChannels(ctx),
   'GET /api/search': (ctx) => search(ctx.url),
   'GET /api/channel': (ctx) => channel(ctx.url),
   'GET /api/channel-search': (ctx) => channelSearch(ctx.url),
