@@ -3,8 +3,8 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=0c09f13-mvfyeyp6';
-import { probeNote } from './probe.js?v=0c09f13-mvfyeyp6';
+import { focusables, pickNext } from './nav.js?v=1351152-mvfykb2n';
+import { probeNote } from './probe.js?v=1351152-mvfykb2n';
 
 const root = document.documentElement;
 
@@ -69,6 +69,12 @@ const controlsHidden = () => playerOpen() && !player().classList.contains('show'
 const scope = () => (playerOpen() ? player() : document.getElementById('app'));
 
 function selected() {
+  // Controls hidden: the video itself is selected; any nudge brings them back.
+  if (controlsHidden()) {
+    const shield = document.getElementById('p-shield');
+    if (document.activeElement !== shield) shield.focus({ preventScroll: true });
+    return shield;
+  }
   const items = focusables(scope());
   if (items.includes(document.activeElement)) return document.activeElement;
   const first = scope().querySelector('[aria-current="page"]') ?? items[0];

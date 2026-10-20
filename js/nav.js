@@ -44,8 +44,9 @@ export function pickNext(from, rects, dir) {
   return best;
 }
 
+// data-nav="skip": never a target of a move (the player's full-screen shield).
 export function focusables(root) {
-  return [...root.querySelectorAll('button, input, textarea, summary, [tabindex="0"]')].filter(
+  return [...root.querySelectorAll('button:not([data-nav="skip"]), input, textarea, summary, [tabindex="0"]')].filter(
     (el) => !el.disabled && !el.closest('[hidden], [inert], .knob-sensor') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden',
   );
 }
