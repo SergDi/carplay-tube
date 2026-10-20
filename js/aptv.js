@@ -3,8 +3,8 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=c686003-mvfyngzc';
-import { probeNote } from './probe.js?v=c686003-mvfyngzc';
+import { focusables, pickNext } from './nav.js?v=e9cca23-mvfysmuv';
+import { probeNote } from './probe.js?v=e9cca23-mvfysmuv';
 
 const root = document.documentElement;
 
@@ -27,9 +27,26 @@ export let iosDesktopMode = /Macintosh/.test(navigator.userAgent) && (navigator.
 // resize would undo it (and the car screen does not rotate).
 // Only the interface is zoomed (--ui-zoom in styles.css): zooming the page
 // would zoom the YouTube iframe too, and WebKit then shows a corner of the video.
+// The interface is laid out as if the screen were this wide (Settings → «Размер
+// интерфейса»); the screen width is read before any zoom and kept, since in
+// WebKit the zoom itself changes innerWidth.
+const LAYOUT_WIDTH = { small: 980, normal: 820, large: 680 };
+let screenWidth = 0;
+
 function fitWidth() {
-  if (root.style.getPropertyValue('--ui-zoom')) return;
-  if (innerWidth > 900) root.style.setProperty('--ui-zoom', String(innerWidth / 820));
+  screenWidth ||= innerWidth;
+  let size = 'normal';
+  try {
+    size = JSON.parse(localStorage.getItem('carplay_tube_v1') || '{}').uiSize ?? 'normal';
+  } catch {
+    // Storage blocked: default size.
+  }
+  const target = LAYOUT_WIDTH[size] ?? LAYOUT_WIDTH.normal;
+  root.style.setProperty('--ui-zoom', screenWidth > target ? String(screenWidth / target) : '1');
+}
+
+export function applyUiSize() {
+  if (root.classList.contains('aptv')) fitWidth();
 }
 
 function enterAptvMode() {

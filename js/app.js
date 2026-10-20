@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=c686003-mvfyngzc';
-import { api } from './api.js?v=c686003-mvfyngzc';
-import { store } from './store.js?v=c686003-mvfyngzc';
-import { DIRECTIONS, moveFocus } from './nav.js?v=c686003-mvfyngzc';
-import * as player from './player.js?v=c686003-mvfyngzc';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=c686003-mvfyngzc';
-import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=c686003-mvfyngzc';
+import { iosDesktopMode, applyUiSize } from './aptv.js?v=e9cca23-mvfysmuv';
+import { api } from './api.js?v=e9cca23-mvfysmuv';
+import { store } from './store.js?v=e9cca23-mvfysmuv';
+import { DIRECTIONS, moveFocus } from './nav.js?v=e9cca23-mvfysmuv';
+import * as player from './player.js?v=e9cca23-mvfysmuv';
+import { probeLog, onProbeSettled } from './probe.js?v=e9cca23-mvfysmuv';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=e9cca23-mvfysmuv';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -536,6 +536,27 @@ function viewSection() {
   );
 }
 
+function sizeSection() {
+  const size = store.get().uiSize ?? 'normal';
+  const option = (value, label) => {
+    const b = action(label, () => {
+      store.set({ uiSize: value });
+      applyUiSize();
+      keepFocus(showSettings);
+    }, `size:${value}`);
+    b.classList.add('chip');
+    b.setAttribute('aria-pressed', String(size === value));
+    return b;
+  };
+  return el(
+    'section',
+    {},
+    el('h2', { textContent: 'Размер интерфейса' }),
+    el('p', { textContent: 'Карточки, кнопки и надписи. Видео всегда на весь экран.' }),
+    el('div', { className: 'actions' }, option('small', 'Мельче'), option('normal', 'Обычный'), option('large', 'Крупнее')),
+  );
+}
+
 let channelResults = []; // last channel search, kept across settings re-renders
 
 function toggleChannel(c) {
@@ -623,34 +644,13 @@ onProbeSettled(() => {
 
 function showSettings() {
   renderChips([]);
-  const probe = el(
-    'section',
-    {},
-    el('h2', { textContent: 'Проверка шайбы' }),
-    el('p', { textContent: 'Последние 40 событий, новые сверху: что получил сайт и что APTV сделал со страницей. После проверки нажми «Отправить журнал».' }),
-    probeView(),
-    el('p', { className: 'note', textContent: `Экран ${innerWidth}×${innerHeight}, касаний ${navigator.maxTouchPoints}${iosDesktopMode ? ', режим APTV' : ''}, браузер: ${navigator.userAgent}` }),
-    el('div', { className: 'actions' },
-      action('Отправить журнал', async () => {
-        try {
-          await sendReport();
-          toast('Журнал отправлен');
-        } catch (err) {
-          toast(err.message);
-        }
-      }, 'probe-send'),
-      action('Очистить журнал', clearProbe, 'probe-clear'),
-      action('Тест шайбы', () => location.assign('knob-test.html'), 'knob-test'),
-      action('Тест датчиков', () => location.assign('sensor-test.html'), 'sensor-test'),
-    ),
-  );
   $('content').replaceChildren(
     el(
       'div',
       { className: 'settings' },
       signInSection(),
       viewSection(),
-      probe,
+      sizeSection(),
       channelsSection(),
     ),
   );
