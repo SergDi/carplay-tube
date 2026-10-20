@@ -3,6 +3,8 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
+import { focusables, pickNext } from './nav.js?v=3f19882-mvfx8rmy';
+
 const root = document.documentElement;
 
 const SEEN = 'carplay_tube_aptv';
@@ -31,6 +33,7 @@ function enterAptvMode() {
   iosDesktopMode = true;
   root.classList.add('aptv');
   fitWidth();
+  startSensors();
   try {
     localStorage.setItem(SEEN, '1');
   } catch {
@@ -38,51 +41,128 @@ function enterAptvMode() {
   }
 }
 
-if (iosDesktopMode) enterAptvMode();
 
 // APTV's knob highlight: `outline: 3px solid rgb(255, 64, 98) !important`.
 const APTV_RING = /rgb\(255,\s*64,\s*98\)/;
 
-// APTV's nudge picks the nearest candidate in that direction by straight-line
-// distance, so from the first row of big cards «right» lands on the filters
-// above instead of the next card. It skips aria-hidden elements (knob-test.html),
-// so while the ring is on a card the top bar is hidden from it — except, on the
-// first row, the controls right above that card, which keeps «up» working.
-const topBar = () => [...document.querySelectorAll('#top button, #search-bar button, #search-bar input')];
-const overlapX = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0;
+// APTV's own nudge picks the nearest candidate by straight-line distance, which
+// jumps between rows on a grid of big cards. So in APTV the site drives the
+// cursor itself: every real control is hidden from APTV's scan (aria-hidden,
+// see knob-test.html) and only five transparent sensors are left. The centre
+// one covers the selected control, so APTV's red ring outlines it; one sensor
+// sits beyond each edge. A nudge rings the sensor on that side: the site moves
+// its focus that way (nav.js) and lays the sensors out around the new control.
+// A press clicks the centre: the site presses the selected control. Where
+// nothing lies in a direction its sensor is hidden, so the nudge leaves the
+// page (to the CarPlay dock, APTV's toolbar). See sensor-test.html.
+const GAP = 34;
+const sensors = [];
+const role = new Map();
+let center = null;
+let laying = 0;
 
-function shapeTopBar(ringed) {
-  const bar = topBar();
-  const card = ringed.closest('#content') ? ringed : null;
-  if (!card) {
-    bar.forEach((b) => b.removeAttribute('aria-hidden'));
-    return;
-  }
-  const r = card.getBoundingClientRect();
-  const cards = [...document.querySelectorAll('#content button')];
-  const firstRow = !cards.some((c) => c !== card && c.getBoundingClientRect().bottom <= r.top + 1);
-  let above = firstRow ? bar.filter((b) => overlapX(b.getBoundingClientRect(), r)) : [];
-  if (firstRow && !above.length) {
-    // Nothing straight above: keep the closest one so «up» still leads somewhere.
-    const cx = r.left + r.width / 2;
-    above = [bar.reduce((best, b) => {
-      const d = Math.abs(b.getBoundingClientRect().left + b.getBoundingClientRect().width / 2 - cx);
-      return !best || d < best.d ? { b, d } : best;
-    }, null)?.b].filter(Boolean);
-  }
-  bar.forEach((b) => (above.includes(b) ? b.removeAttribute('aria-hidden') : b.setAttribute('aria-hidden', 'true')));
+const player = () => document.getElementById('player');
+const playerOpen = () => !player().hidden;
+const controlsHidden = () => playerOpen() && !player().classList.contains('show');
+const scope = () => (playerOpen() ? player() : document.getElementById('app'));
+
+function selected() {
+  const items = focusables(scope());
+  if (items.includes(document.activeElement)) return document.activeElement;
+  const first = scope().querySelector('[aria-current="page"]') ?? items[0];
+  first?.focus({ preventScroll: true });
+  return first ?? null;
 }
 
-// Mirror APTV's selection into real focus, so everything that listens to focus
-// (scrolling, loading more, the player's controls) follows the knob. The ring
-// itself stays: APTV presses only the element that carries it.
+function neighbour(el, dir) {
+  const others = focusables(scope()).filter((x) => x !== el);
+  const i = pickNext(el.getBoundingClientRect(), others.map((x) => x.getBoundingClientRect()), dir);
+  return i < 0 ? null : others[i];
+}
+
+// Our controls stay clickable by touch but drop out of APTV's knob scan.
+function hideControls() {
+  for (const el of document.querySelectorAll('button, input, textarea, a[href], summary, [tabindex], [role="button"]')) {
+    if (!el.closest('.knob-sensor') && el.getAttribute('aria-hidden') !== 'true') el.setAttribute('aria-hidden', 'true');
+  }
+}
+
+const place = (s, x, y, w, h) => {
+  // Rects come in zoomed pixels, but left/top are applied before the page zoom.
+  const z = parseFloat(root.style.zoom) || 1;
+  // The sensor's wrapper carries the position: APTV rewrites the button's own style.
+  s.parentElement.style.cssText = `left:${x / z}px;top:${y / z}px;width:${w / z}px;height:${h / z}px`;
+};
+
+function layout() {
+  cancelAnimationFrame(laying);
+  laying = requestAnimationFrame(() => {
+    hideControls();
+    const el = selected();
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    place(center, r.left - 5, r.top - 5, r.width + 10, r.height + 10);
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const spots = {
+      up: [cx - 12, r.top - GAP - 12],
+      down: [cx - 12, r.bottom + GAP - 12],
+      left: [r.left - GAP - 12, cy - 12],
+      right: [r.right + GAP - 12, cy - 12],
+    };
+    role.clear();
+    const free = sensors.filter((s) => s !== center);
+    Object.entries(spots).forEach(([dir, [x, y]], i) => {
+      const s = free[i];
+      role.set(s, dir);
+      place(s, x, y, 24, 24);
+      // Hidden controls of the player: any nudge just shows them.
+      const open = controlsHidden() || Boolean(neighbour(el, dir));
+      if (open) s.removeAttribute('aria-hidden');
+      else s.setAttribute('aria-hidden', 'true');
+    });
+  });
+}
+
+function nudged(sensor) {
+  if (sensor === center) return;
+  const dir = role.get(sensor);
+  center = sensor;
+  if (controlsHidden()) document.getElementById('p-shield').click();
+  else neighbour(selected(), dir)?.focus();
+  layout();
+}
+
+function startSensors() {
+  if (sensors.length) return;
+  root.classList.add('knob-sensors');
+  for (let i = 0; i < 5; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'knob-sensor';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Выбрать');
+    // APTV presses the ringed sensor, which after layout is always the centre.
+    b.addEventListener('click', () => b === center && selected()?.click());
+    wrap.append(b);
+    document.body.append(wrap);
+    sensors.push(b);
+  }
+  center = sensors[0];
+  addEventListener('scroll', layout, { capture: true, passive: true });
+  addEventListener('resize', layout);
+  document.addEventListener('focusin', layout);
+  new MutationObserver(layout).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+  layout();
+}
+
+// APTV marks the sensor its nudge landed on with its ring.
 new MutationObserver((records) => {
   for (const r of records) {
     const el = r.target;
     if (!(el instanceof HTMLElement) || !APTV_RING.test(el.getAttribute('style') ?? '')) continue;
     if (!root.classList.contains('aptv')) enterAptvMode();
-    if (document.activeElement !== el) el.focus({ preventScroll: true });
-    shapeTopBar(el);
+    if (sensors.includes(el)) nudged(el);
   }
 }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });
 
@@ -110,3 +190,5 @@ new MutationObserver(() => {
   naming = requestAnimationFrame(nameButtons);
 }).observe(document.body, { subtree: true, childList: true, characterData: true });
 nameButtons();
+
+if (iosDesktopMode) enterAptvMode();

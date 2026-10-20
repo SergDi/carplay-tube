@@ -38,8 +38,30 @@ button {
   outline-offset: 3px;
 }
 
-/* In APTV the knob draws its own red ring; ours would make two. */
+/* In APTV the knob's red ring sits on a sensor over the selected control
+   (js/aptv.js); our own ring would make two. */
 :root.aptv :focus { outline: none !important; }
+
+.knob-sensor { position: fixed; z-index: 50; pointer-events: none; }
+.knob-sensor button {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  pointer-events: auto;
+}
+
+/* Smaller cards with room around them, so the ring has space on every side. */
+:root.aptv .grid { grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 30px 26px; padding: 8px 6px; }
+:root.aptv .card { padding: 10px; background: var(--surface); }
+:root.aptv .card:focus { transform: none; background: var(--surface-2); }
+:root.aptv .row-track { gap: 26px; padding: 12px 20px 16px; }
+:root.aptv .row-track .card { flex-basis: 210px; }
+:root.aptv #chips { gap: 14px; padding: 8px; margin: -8px; }
+:root.aptv #rail { gap: 12px; }
 
 #app {
   display: flex;

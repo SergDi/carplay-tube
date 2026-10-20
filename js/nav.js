@@ -46,7 +46,7 @@ export function pickNext(from, rects, dir) {
 
 export function focusables(root) {
   return [...root.querySelectorAll('button, input, textarea, summary, [tabindex="0"]')].filter(
-    (el) => !el.disabled && !el.closest('[hidden], [inert]') && el.getClientRects().length,
+    (el) => !el.disabled && !el.closest('[hidden], [inert], .knob-sensor') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden',
   );
 }
 
