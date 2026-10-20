@@ -1,10 +1,9 @@
-import { iosDesktopMode, applyUiSize } from './aptv.js?v=e9cca23-mvfysmuv';
-import { api } from './api.js?v=e9cca23-mvfysmuv';
-import { store } from './store.js?v=e9cca23-mvfysmuv';
-import { DIRECTIONS, moveFocus } from './nav.js?v=e9cca23-mvfysmuv';
-import * as player from './player.js?v=e9cca23-mvfysmuv';
-import { probeLog, onProbeSettled } from './probe.js?v=e9cca23-mvfysmuv';
-import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=e9cca23-mvfysmuv';
+import { iosDesktopMode, applyUiSize } from './aptv.js?v=755b17e-mvfyuy2u';
+import { api } from './api.js?v=755b17e-mvfyuy2u';
+import { store } from './store.js?v=755b17e-mvfyuy2u';
+import { DIRECTIONS, moveFocus } from './nav.js?v=755b17e-mvfyuy2u';
+import * as player from './player.js?v=755b17e-mvfyuy2u';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=755b17e-mvfyuy2u';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -622,25 +621,6 @@ function channelsSection() {
     }, `remove:${c.id}`))),
   );
 }
-
-const SESSION = Math.random().toString(36).slice(2, 10); // one journal per page load
-
-function sendReport() {
-  return api.report({
-    session: SESSION,
-    log: probeLog(),
-    screen: `${innerWidth}×${innerHeight}@${devicePixelRatio}`,
-    device: `screen ${screen.width}×${screen.height} · touch ${navigator.maxTouchPoints} · zoom ${document.documentElement.style.getPropertyValue('--ui-zoom') || 1} · visual ${Math.round(visualViewport?.width ?? 0)}×${Math.round(visualViewport?.height ?? 0)}@${visualViewport?.scale ?? '?'} · hover ${matchMedia('(hover: hover)').matches} · coarse ${matchMedia('(pointer: coarse)').matches}`,
-    ua: navigator.userAgent,
-    at: new Date().toISOString(),
-  });
-}
-
-// In APTV the journal goes to the worker by itself once the knob rests, so a
-// session in the car needs no buttons pressed.
-onProbeSettled(() => {
-  if (document.documentElement.classList.contains('aptv')) sendReport().catch(() => {});
-});
 
 function showSettings() {
   renderChips([]);

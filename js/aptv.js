@@ -3,8 +3,7 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=e9cca23-mvfysmuv';
-import { probeNote } from './probe.js?v=e9cca23-mvfysmuv';
+import { focusables, pickNext } from './nav.js?v=755b17e-mvfyuy2u';
 
 const root = document.documentElement;
 
@@ -67,14 +66,14 @@ const APTV_RING = /rgb\(255,\s*64,\s*98\)/;
 
 // APTV's own nudge picks the nearest candidate by straight-line distance, which
 // jumps between rows on a grid of big cards. So in APTV the site drives the
-// cursor itself: every real control is hidden from APTV's scan (aria-hidden,
-// see knob-test.html) and only five transparent sensors are left. The centre
+// cursor itself: every real control is hidden from APTV's scan (it skips
+// aria-hidden elements) and only five transparent sensors are left. The centre
 // one covers the selected control, so APTV's red ring outlines it; one sensor
 // sits beyond each edge. A nudge rings the sensor on that side: the site moves
 // its focus that way (nav.js) and lays the sensors out around the new control.
 // A press clicks the centre: the site presses the selected control. Where
 // nothing lies in a direction its sensor is hidden, so the nudge leaves the
-// page (to the CarPlay dock, APTV's toolbar). See sensor-test.html.
+// page (to the CarPlay dock, APTV's toolbar).
 const GAP = 34;
 const sensors = [];
 const role = new Map();
@@ -116,8 +115,6 @@ function neighbour(el, dir) {
   return (zone && pick(others.filter((x) => zoneOf(x) === zone))) || pick(others);
 }
 
-const label = (el) => (el?.getAttribute('aria-label') || el?.textContent || '—').trim().replace(/\s+/g, ' ').slice(0, 28);
-const NAMES = { up: 'вверх', down: 'вниз', left: 'влево', right: 'вправо' };
 
 // Our controls stay clickable by touch but drop out of APTV's knob scan.
 function hideControls() {
@@ -172,13 +169,9 @@ function nudged(sensor) {
   const dir = role.get(sensor);
   center = sensor;
   if (controlsHidden()) {
-    probeNote(`шайба: ${NAMES[dir]} → показать кнопки плеера`);
     document.getElementById('p-shield').click();
   } else {
-    const from = selected();
-    const to = neighbour(from, dir);
-    probeNote(`шайба: ${NAMES[dir]} · ${label(from)} → ${to ? label(to) : 'край'}`);
-    to?.focus();
+    neighbour(selected(), dir)?.focus();
   }
   layout();
 }
@@ -193,11 +186,7 @@ function startSensors() {
     b.type = 'button';
     b.setAttribute('aria-label', 'Выбрать');
     // APTV presses the ringed sensor, which after layout is always the centre.
-    b.addEventListener('click', () => {
-      if (b !== center) return;
-      probeNote(`шайба: нажатие → ${label(selected())}`);
-      selected()?.click();
-    });
+    b.addEventListener('click', () => b === center && selected()?.click());
     wrap.append(b);
     document.body.append(wrap);
     sensors.push(b);

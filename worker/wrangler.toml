@@ -3,7 +3,3 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Diagnostic reports sent from Settings → «Проверка шайбы» (kept 14 days).
-[[kv_namespaces]]
-binding = "REPORTS"
-id = "2ac4333e7b244cf390836dd04dfbfc93"
