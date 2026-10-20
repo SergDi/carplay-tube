@@ -71,11 +71,18 @@ test('Shorts tile takes its title from the thumbnail overlay', () => {
   assert.equal(card.thumb, 'https://i.ytimg.com/vi/x/oar2.jpg');
 });
 
-test('home: shelves become filters, «Все» dedupes', () => {
-  const all = homeView(shelves(page), '');
-  assert.deepEqual(all.chips.map((c) => c.title), ['Все', 'Рекомендованные', 'Shorts', '']);
+test('home: «Все», «Музыка», topics with short names, service shelves last', () => {
+  const list = [
+    { title: 'Рекомендованные', cards: [{ id: 'a' }] },
+    { title: 'Кулинарные шоу и другие', cards: [{ id: 'b' }, { id: 'a' }] },
+    { title: 'Shorts', cards: [{ id: 's' }] },
+    { title: 'Видеоигры', cards: [{ id: 'g' }] },
+  ];
+  const all = homeView(list, '');
+  assert.deepEqual(all.chips.map((c) => c.title), ['Все', 'Музыка', 'Кулинарные шоу', 'Видеоигры', 'Рекомендованные', 'Shorts']);
   assert.equal(all.items.length, 4);
-  assert.deepEqual(homeView(shelves(page), '1').items.map((c) => c.id), ['sssssssssss']);
+  assert.deepEqual(homeView(list, 'Кулинарные шоу и другие').items.map((c) => c.id), ['b', 'a']);
+  assert.equal(homeView(list, 'music').chips[1].selected, true);
 });
 
 test('subscriptions filters', () => {

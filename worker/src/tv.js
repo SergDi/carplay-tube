@@ -52,12 +52,19 @@ export function tileToCard(tile) {
 const nextToken = (continuations) => continuations?.[0]?.nextContinuationData?.continuation ?? null;
 
 // next: token for more tiles of the same shelf (horizontal continuation).
+// History is one grid and playlists (Смотреть позже, Понравившиеся) one list:
+// both come back as a single untitled shelf.
 export function shelves(data) {
-  return walk(data, 'shelfRenderer').map((shelf) => ({
+  const list = walk(data, 'shelfRenderer').map((shelf) => ({
     title: text(walk(shelf.headerRenderer ?? {}, 'title')[0]),
     cards: walk(shelf, 'tileRenderer').map(tileToCard).filter(Boolean),
     next: nextToken(shelf.content?.horizontalListRenderer?.continuations),
   })).filter((s) => s.cards.length);
+  if (list.length) return list;
+  const flat = walk(data, 'gridRenderer')[0] ?? walk(data, 'playlistVideoListRenderer')[0];
+  if (!flat) return [];
+  const cards = walk(flat, 'tileRenderer').map(tileToCard).filter(Boolean);
+  return cards.length ? [{ title: '', cards, next: nextToken(flat.continuations) }] : [];
 }
 
 // Token for the next page of shelves, on the first page or on a continuation page.
@@ -68,7 +75,8 @@ export function sectionNext(data) {
 
 // A horizontal continuation page: more tiles for one shelf.
 export function shelfPage(data) {
-  const list = data.continuationContents?.horizontalListContinuation ?? {};
+  const c = data.continuationContents ?? {};
+  const list = c.horizontalListContinuation ?? c.gridContinuation ?? c.playlistVideoListContinuation ?? {};
   return { cards: walk(list.items ?? [], 'tileRenderer').map(tileToCard).filter(Boolean), next: nextToken(list.continuations) };
 }
 

@@ -1,5 +1,5 @@
-import { API_BASE } from './config.js?v=7c86cfb-mvfy6c8r';
-import { store } from './store.js?v=7c86cfb-mvfy6c8r';
+import { API_BASE } from './config.js?v=0c09f13-mvfyeyp6';
+import { store } from './store.js?v=0c09f13-mvfyeyp6';
 
 async function call(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`${API_BASE}${path}`);
@@ -32,6 +32,7 @@ export const api = {
   authPoll: (device_code, client) => call('/api/auth/poll', { method: 'POST', body: { device_code, client } }),
   home: () => call('/api/home'),
   subscriptions: () => call('/api/subscriptions'),
+  topic: (id) => call('/api/topic', { params: { id } }),
   more: (token, kind) => call('/api/more', { method: 'POST', body: { token, kind } }),
   searchMore: (token) => call('/api/search-more', { method: 'POST', body: { token } }),
   localSubscriptions: (channels, filter) =>

@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=7c86cfb-mvfy6c8r';
-import { api } from './api.js?v=7c86cfb-mvfy6c8r';
-import { store } from './store.js?v=7c86cfb-mvfy6c8r';
-import { DIRECTIONS, moveFocus } from './nav.js?v=7c86cfb-mvfy6c8r';
-import * as player from './player.js?v=7c86cfb-mvfy6c8r';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=7c86cfb-mvfy6c8r';
-import { dedupe, mergeShelves, homeView, subscriptionsView } from './feeds.js?v=7c86cfb-mvfy6c8r';
+import { iosDesktopMode } from './aptv.js?v=0c09f13-mvfyeyp6';
+import { api } from './api.js?v=0c09f13-mvfyeyp6';
+import { store } from './store.js?v=0c09f13-mvfyeyp6';
+import { DIRECTIONS, moveFocus } from './nav.js?v=0c09f13-mvfyeyp6';
+import * as player from './player.js?v=0c09f13-mvfyeyp6';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=0c09f13-mvfyeyp6';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=0c09f13-mvfyeyp6';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -13,10 +13,10 @@ const el = (tag, props = {}, ...children) => {
   return node;
 };
 
-const TABS = ['home', 'subs', 'search', 'settings'];
+const TABS = ['home', 'subs', 'history', 'search', 'settings'];
 
 let tab = TABS.includes(store.get().tab) ? store.get().tab : 'home';
-const chipByTab = { home: '', subs: '', search: '' };
+const chipByTab = { home: '', subs: '', history: 'history', search: '' };
 let query = '';
 let returnFocus = null;
 let signIn = null; // pending device-code sign-in: {user_code, verification_url, timer}
@@ -119,18 +119,35 @@ function skeleton() {
 //  local — channel RSS without an account, no more.
 let feed = null;
 
-const shelfFeed = () => feed.kind === 'home' || feed.kind === 'subs';
-const asRows = () => shelfFeed() && store.get().view === 'tv';
+const shelfFeed = () => ['home', 'subs', 'music', 'library'].includes(feed.kind);
+let homeShelves = []; // the home filters stay on screen while «Музыка» is open
+const asRows = () => ['home', 'subs', 'music'].includes(feed.kind) && store.get().view === 'tv';
+
+// «История»: the viewer's YouTube history and playlists, one list each.
+const LIBRARY = [
+  { title: 'История', value: 'history' },
+  { title: 'Смотреть позже', value: 'later' },
+  { title: 'Понравившиеся', value: 'liked' },
+];
 
 function currentView() {
   if (feed.kind === 'home') return homeView(feed.shelves, chipByTab.home);
+  if (feed.kind === 'music') return { chips: homeChips(homeShelves, MUSIC), items: dedupe(feed.shelves.flatMap((s) => s.cards)), shelf: null };
+  if (feed.kind === 'library') {
+    return {
+      chips: LIBRARY.map((c) => ({ ...c, selected: c.value === chipByTab.history })),
+      items: dedupe(feed.shelves.flatMap((s) => s.cards)),
+      shelf: feed.shelves[0] ?? null,
+    };
+  }
   if (feed.kind === 'subs') return subscriptionsView(feed.shelves, chipByTab.subs);
   return { chips: feed.chips, items: feed.items, shelf: null };
 }
 
 function emptyMessage() {
   if (feed.kind === 'search') return message('Ничего не нашлось', `По запросу «${query}» видео нет.`);
-  if (feed.kind === 'home') return message('Лента пуста', 'YouTube ничего не вернул.');
+  if (feed.kind === 'home' || feed.kind === 'music') return message('Лента пуста', 'YouTube ничего не вернул.');
+  if (feed.kind === 'library') return message('Здесь пусто', 'В этом списке пока нет видео.');
   return message('Здесь пусто', 'По этому фильтру видео нет.');
 }
 
@@ -148,7 +165,8 @@ function draw() {
   feed.drawn = new Set();
   feed.tracks = new Map();
   if (asRows()) {
-    renderChips([]);
+    // Rows show every shelf; on Home only «Все» / «Музыка» stay as filters.
+    renderChips(feed.kind === 'subs' ? [] : homeChips([], feed.kind === 'music' ? MUSIC : ''));
     $('content').replaceChildren(el('div', { className: 'rows' }, ...feed.shelves.map(rowNode)));
     return;
   }
@@ -183,7 +201,7 @@ function drawMore() {
     return added;
   }
   const view = currentView();
-  if (feed.kind === 'home') keepFocus(() => renderChips(view.chips));
+  if (feed.kind === 'home' || feed.kind === 'music') keepFocus(() => renderChips(view.chips));
   const fresh = view.items.filter((c) => !feed.drawn.has(c.id));
   if (!fresh.length) return 0;
   let grid = $('content').querySelector('.grid');
@@ -217,14 +235,15 @@ async function loadMore(hint = {}, depth = 0) {
   } else if (shelfFeed()) {
     const shelf = hint.shelf != null ? f.shelves.find((s) => s.title === hint.shelf) : null;
     if (shelf?.next) {
-      request = api.more(shelf.next, f.kind).then((r) => {
+      request = api.more(shelf.next, f.kind === 'subs' ? 'subs' : 'home').then((r) => {
         shelf.cards = dedupe([...shelf.cards, ...(r.cards ?? [])]);
         shelf.next = r.next ?? null;
       });
     } else if (f.next) {
       // A shelf without its own continuation grows from the next page (fresh uploads do).
-      request = api.more(f.next, f.kind).then((r) => {
+      request = api.more(f.next, f.kind === 'subs' ? 'subs' : 'home').then((r) => {
         f.shelves = mergeShelves(r.shelves ?? [], f.shelves);
+        if (f.kind === 'home') homeShelves = f.shelves;
         f.next = r.next ?? null;
       });
     } else return;
@@ -246,6 +265,7 @@ async function loadMore(hint = {}, depth = 0) {
 }
 
 function gridHint() {
+  if (feed?.kind === 'library') return { shelf: feed.shelves[0]?.title ?? '' };
   if (feed?.kind !== 'home' || asRows()) return {};
   const picked = currentView().shelf;
   return picked ? { shelf: picked.title } : {};
@@ -279,6 +299,7 @@ async function startFeed(kind, loader, { focusResults = false } = {}) {
     const data = await loader();
     if (f !== feed) return;
     f.shelves = data.shelves ?? [];
+    if (kind === 'home') homeShelves = f.shelves;
     f.next = data.next ?? null;
     f.items = data.items ?? [];
     f.chips = data.chips ?? [];
@@ -296,8 +317,15 @@ async function startFeed(kind, loader, { focusResults = false } = {}) {
 }
 
 function pickChip(value) {
+  const switchesMusic = tab === 'home' && (value === MUSIC || feed?.kind === 'music');
   chipByTab[tab] = value;
-  if (feed && shelfFeed()) {
+  if (tab === 'history') {
+    showHistory();
+    $('chips').querySelector('[aria-pressed="true"]')?.focus();
+  } else if (switchesMusic) {
+    showHome();
+    $('chips').querySelector('[aria-pressed="true"]')?.focus();
+  } else if (feed && shelfFeed()) {
     draw();
     $('chips').querySelector('[aria-pressed="true"]')?.focus();
     $('main').scrollTop = 0;
@@ -318,7 +346,8 @@ function showHome() {
     );
     return;
   }
-  startFeed('home', () => api.home());
+  if (chipByTab.home === MUSIC) startFeed('music', () => api.topic('music'));
+  else startFeed('home', () => api.home());
 }
 
 function showSubs() {
@@ -339,6 +368,17 @@ function showSubs() {
     return;
   }
   startFeed('local', () => api.localSubscriptions(channels.map((c) => c.id), chipByTab.subs || 'Все'));
+}
+
+function showHistory() {
+  if (!signedIn()) {
+    renderChips([]);
+    $('content').replaceChildren(
+      message('История появится после входа', 'YouTube отдаёт её только по аккаунту.', action('Войти', goTo('settings'))),
+    );
+    return;
+  }
+  startFeed('library', () => api.topic(chipByTab.history || 'history'));
 }
 
 // ---------- search ----------
@@ -633,7 +673,7 @@ function show() {
   renderRail();
   $('search-bar').hidden = tab !== 'search';
   $('main').dataset.tab = tab;
-  ({ home: showHome, subs: showSubs, search: showSearch, settings: showSettings })[tab]();
+  ({ home: showHome, subs: showSubs, history: showHistory, search: showSearch, settings: showSettings })[tab]();
   $('main').scrollTop = 0;
 }
 

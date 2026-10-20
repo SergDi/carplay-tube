@@ -78,6 +78,29 @@ const tvBrowser = (yt) => async (params) => (await yt.actions.execute('/browse',
 // The TV surface hands out ~4 shelves of 5 tiles at a time. The first answer
 // collects a few pages and one more stretch of every shelf; the site asks
 // /api/more with the returned tokens as the viewer scrolls further.
+// TV carousels (Music → «Рекомендованные») come without titles; YouTube's
+// public oEmbed gives title and channel by video id.
+const MAX_NAMED = 24;
+
+async function nameUntitled(list) {
+  const blank = list.flatMap((s) => s.cards).filter((c) => !c.title).slice(0, MAX_NAMED);
+  await Promise.all(blank.map(async (c) => {
+    try {
+      const res = await fetch(`https://www.youtube.com/oembed?format=json&url=https://www.youtube.com/watch?v=${c.id}`, {
+        cf: { cacheTtl: 86400, cacheEverything: true },
+      });
+      if (!res.ok) return;
+      const o = await res.json();
+      c.title = o.title ?? '';
+      c.channel = c.channel || o.author_name || '';
+    } catch {
+      // Stays untitled.
+    }
+  }));
+  for (const s of list) s.cards = s.cards.filter((c) => c.title);
+  return list;
+}
+
 async function tvFeed(ctx, browseId, kind) {
   const browse = tvBrowser(await tv(ctx));
   let page = await browse({ browseId });
@@ -99,15 +122,30 @@ async function tvFeed(ctx, browseId, kind) {
       }
     }),
   );
-  return { shelves: mergeShelves(list.map(named(kind))), next: sectionNext(page) };
+  return { shelves: mergeShelves(await nameUntitled(list.map(named(kind)))), next: sectionNext(page) };
+}
+
+// YouTube TV's pages: «music» is personal (mixes, recently played); the
+// library ones are the viewer's history and playlists.
+const TOPICS = { music: 'FEtopics_music', history: 'FEhistory', later: 'VLWL', liked: 'VLLL' };
+
+function topicFeed(ctx) {
+  const id = TOPICS[ctx.url.searchParams.get('id')];
+  if (!id) throw new HttpError(400, 'Нет такого раздела');
+  return tvFeed(ctx, id, 'home');
 }
 
 async function moreFeed(ctx) {
   const { token, kind } = await ctx.request.json().catch(() => ({}));
   if (!token) throw new HttpError(400, 'Нет продолжения');
   const data = await tvBrowser(await tv(ctx))({ continuation: token });
-  if (data.continuationContents?.horizontalListContinuation) return shelfPage(data);
-  return { shelves: mergeShelves(shelves(data).map(named(kind === 'home' ? 'home' : 'subs'))), next: sectionNext(data) };
+  const cc = data.continuationContents ?? {};
+  if (cc.horizontalListContinuation || cc.gridContinuation || cc.playlistVideoListContinuation) {
+    const page = shelfPage(data);
+    const [named] = await nameUntitled([{ title: '', cards: page.cards }]);
+    return { cards: named.cards, next: page.next };
+  }
+  return { shelves: mergeShelves(await nameUntitled(shelves(data).map(named(kind === 'home' ? 'home' : 'subs')))), next: sectionNext(data) };
 }
 
 async function myChannels(ctx) {
@@ -245,6 +283,7 @@ const ROUTES = {
   'POST /api/auth/poll': (ctx) => authPoll(ctx.request),
   'GET /api/home': (ctx) => tvFeed(ctx, 'FEwhat_to_watch', 'home'),
   'GET /api/subscriptions': (ctx) => tvFeed(ctx, 'FEsubscriptions', 'subs'),
+  'GET /api/topic': (ctx) => topicFeed(ctx),
   'POST /api/more': (ctx) => moreFeed(ctx),
   'POST /api/search-more': (ctx) => searchMore(ctx.request),
   'GET /api/my-channels': (ctx) => myChannels(ctx),

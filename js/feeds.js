@@ -24,17 +24,29 @@ export function mergeShelves(list, into = []) {
   return out;
 }
 
-// Home: every shelf is a filter; «Все» mixes them in page order.
+// Home filters, like YouTube's chips: «Все», «Музыка» (its own TV page), then
+// the topic shelves with short names, then the service shelves. A filter's value
+// is its shelf title, so it survives shelves being added by «more».
+export const MUSIC = 'music';
+const SERVICE = /^(Рекомендован|Недавно опубликован|Продолжить просмотр|Shorts|Новое для вас|На основе|Ещё для вас|Новые видео|Смотреть позже)/i;
+const tidy = (title) => title.replace(/\s+(и другие|and more)$/i, '');
+
+export function homeChips(shelves, chip) {
+  const topics = shelves.filter((s) => !SERVICE.test(s.title));
+  const service = shelves.filter((s) => SERVICE.test(s.title));
+  return [
+    { title: 'Все', value: '', selected: !chip },
+    { title: 'Музыка', value: MUSIC, selected: chip === MUSIC },
+    ...[...topics, ...service].map((s) => ({ title: tidy(s.title), value: s.title, selected: chip === s.title })),
+  ];
+}
+
 export function homeView(shelves, chip) {
-  const index = chip === '' || chip == null ? -1 : Number(chip);
-  const picked = shelves[index];
+  const picked = shelves.find((s) => s.title === chip) ?? null;
   return {
-    chips: [
-      { title: 'Все', value: '', selected: !picked },
-      ...shelves.map((s, i) => ({ title: s.title, value: String(i), selected: picked === s })),
-    ],
+    chips: homeChips(shelves, chip),
     items: picked ? picked.cards : dedupe(shelves.flatMap((s) => s.cards)),
-    shelf: picked ?? null,
+    shelf: picked,
   };
 }
 
