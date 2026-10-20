@@ -3,8 +3,8 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=1351152-mvfykb2n';
-import { probeNote } from './probe.js?v=1351152-mvfykb2n';
+import { focusables, pickNext } from './nav.js?v=c686003-mvfyngzc';
+import { probeNote } from './probe.js?v=c686003-mvfyngzc';
 
 const root = document.documentElement;
 
@@ -25,9 +25,11 @@ export let iosDesktopMode = /Macintosh/.test(navigator.userAgent) && (navigator.
 // Lay the page out as if the screen were ~820px wide, the size of a car display.
 // Measured once: in WebKit the zoom itself changes innerWidth, so reacting to
 // resize would undo it (and the car screen does not rotate).
+// Only the interface is zoomed (--ui-zoom in styles.css): zooming the page
+// would zoom the YouTube iframe too, and WebKit then shows a corner of the video.
 function fitWidth() {
-  if (root.style.zoom) return;
-  if (innerWidth > 900) root.style.zoom = String(innerWidth / 820);
+  if (root.style.getPropertyValue('--ui-zoom')) return;
+  if (innerWidth > 900) root.style.setProperty('--ui-zoom', String(innerWidth / 820));
 }
 
 function enterAptvMode() {
@@ -108,10 +110,8 @@ function hideControls() {
 }
 
 const place = (s, x, y, w, h) => {
-  // Rects come in zoomed pixels, but left/top are applied before the page zoom.
-  const z = parseFloat(root.style.zoom) || 1;
   // The sensor's wrapper carries the position: APTV rewrites the button's own style.
-  s.parentElement.style.cssText = `left:${x / z}px;top:${y / z}px;width:${w / z}px;height:${h / z}px`;
+  s.parentElement.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
 };
 
 function layout() {

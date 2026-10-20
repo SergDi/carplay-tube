@@ -42,6 +42,9 @@ button {
    (js/aptv.js); our own ring would make two. */
 :root.aptv :focus { outline: none !important; }
 
+/* APTV: the interface, not the page, is zoomed to car-screen size (js/aptv.js). */
+#app, #p-top, #p-bottom, #p-status, #toast { zoom: var(--ui-zoom, 1); }
+
 .knob-sensor { position: fixed; z-index: 50; pointer-events: none; }
 .knob-sensor button {
   display: block;

@@ -1,10 +1,10 @@
-import { iosDesktopMode } from './aptv.js?v=1351152-mvfykb2n';
-import { api } from './api.js?v=1351152-mvfykb2n';
-import { store } from './store.js?v=1351152-mvfykb2n';
-import { DIRECTIONS, moveFocus } from './nav.js?v=1351152-mvfykb2n';
-import * as player from './player.js?v=1351152-mvfykb2n';
-import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=1351152-mvfykb2n';
-import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=1351152-mvfykb2n';
+import { iosDesktopMode } from './aptv.js?v=c686003-mvfyngzc';
+import { api } from './api.js?v=c686003-mvfyngzc';
+import { store } from './store.js?v=c686003-mvfyngzc';
+import { DIRECTIONS, moveFocus } from './nav.js?v=c686003-mvfyngzc';
+import * as player from './player.js?v=c686003-mvfyngzc';
+import { probeView, clearProbe, probeLog, onProbeSettled } from './probe.js?v=c686003-mvfyngzc';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=c686003-mvfyngzc';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -609,7 +609,7 @@ function sendReport() {
     session: SESSION,
     log: probeLog(),
     screen: `${innerWidth}×${innerHeight}@${devicePixelRatio}`,
-    device: `screen ${screen.width}×${screen.height} · touch ${navigator.maxTouchPoints} · zoom ${document.documentElement.style.zoom || 1} · visual ${Math.round(visualViewport?.width ?? 0)}×${Math.round(visualViewport?.height ?? 0)}@${visualViewport?.scale ?? '?'} · hover ${matchMedia('(hover: hover)').matches} · coarse ${matchMedia('(pointer: coarse)').matches}`,
+    device: `screen ${screen.width}×${screen.height} · touch ${navigator.maxTouchPoints} · zoom ${document.documentElement.style.getPropertyValue('--ui-zoom') || 1} · visual ${Math.round(visualViewport?.width ?? 0)}×${Math.round(visualViewport?.height ?? 0)}@${visualViewport?.scale ?? '?'} · hover ${matchMedia('(hover: hover)').matches} · coarse ${matchMedia('(pointer: coarse)').matches}`,
     ua: navigator.userAgent,
     at: new Date().toISOString(),
   });
