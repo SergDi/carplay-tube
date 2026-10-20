@@ -3,7 +3,8 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=3f19882-mvfx8rmy';
+import { focusables, pickNext } from './nav.js?v=f62ca6c-mvfxd4os';
+import { probeNote } from './probe.js?v=f62ca6c-mvfxd4os';
 
 const root = document.documentElement;
 
@@ -74,11 +75,23 @@ function selected() {
   return first ?? null;
 }
 
+// Regions of the screen: a move stays inside the current one when it can, so
+// «up» from a card scrolled under the top bar finds the card above it, not the bar.
+const ZONES = ['#content', '#search-bar', '#top', '#player'];
+const zoneOf = (el) => ZONES.find((z) => el.closest(z)) ?? null;
+
 function neighbour(el, dir) {
   const others = focusables(scope()).filter((x) => x !== el);
-  const i = pickNext(el.getBoundingClientRect(), others.map((x) => x.getBoundingClientRect()), dir);
-  return i < 0 ? null : others[i];
+  const pick = (list) => {
+    const i = pickNext(el.getBoundingClientRect(), list.map((x) => x.getBoundingClientRect()), dir);
+    return i < 0 ? null : list[i];
+  };
+  const zone = zoneOf(el);
+  return (zone && pick(others.filter((x) => zoneOf(x) === zone))) || pick(others);
 }
+
+const label = (el) => (el?.getAttribute('aria-label') || el?.textContent || '—').trim().replace(/\s+/g, ' ').slice(0, 28);
+const NAMES = { up: 'вверх', down: 'вниз', left: 'влево', right: 'вправо' };
 
 // Our controls stay clickable by touch but drop out of APTV's knob scan.
 function hideControls() {
@@ -128,8 +141,15 @@ function nudged(sensor) {
   if (sensor === center) return;
   const dir = role.get(sensor);
   center = sensor;
-  if (controlsHidden()) document.getElementById('p-shield').click();
-  else neighbour(selected(), dir)?.focus();
+  if (controlsHidden()) {
+    probeNote(`шайба: ${NAMES[dir]} → показать кнопки плеера`);
+    document.getElementById('p-shield').click();
+  } else {
+    const from = selected();
+    const to = neighbour(from, dir);
+    probeNote(`шайба: ${NAMES[dir]} · ${label(from)} → ${to ? label(to) : 'край'}`);
+    to?.focus();
+  }
   layout();
 }
 
@@ -143,7 +163,11 @@ function startSensors() {
     b.type = 'button';
     b.setAttribute('aria-label', 'Выбрать');
     // APTV presses the ringed sensor, which after layout is always the centre.
-    b.addEventListener('click', () => b === center && selected()?.click());
+    b.addEventListener('click', () => {
+      if (b !== center) return;
+      probeNote(`шайба: нажатие → ${label(selected())}`);
+      selected()?.click();
+    });
     wrap.append(b);
     document.body.append(wrap);
     sensors.push(b);

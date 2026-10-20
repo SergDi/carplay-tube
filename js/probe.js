@@ -43,6 +43,7 @@ export function onProbeSettled(fn, delay = 4000) {
 }
 
 export const probeLog = () => [...log];
+export const probeNote = (line) => add(line);
 
 // ---------- input events ----------
 
@@ -110,7 +111,7 @@ spy(Document.prototype, 'elementFromPoint', (d, [x, y]) => `elementFromPoint(${M
 
 const OURS = new Set(['content', 'chips', 'player', 'toast', 'search-bar', 'rail', 'key-probe', 'p-time', 'p-bar', 'p-status', 'p-play']);
 const insideOurs = (node) => {
-  for (let n = node; n; n = n.parentElement) if (OURS.has(n.id)) return true;
+  for (let n = node; n; n = n.parentElement) if (OURS.has(n.id) || n.classList?.contains('knob-sensor')) return true;
   return false;
 };
 
@@ -128,7 +129,7 @@ new MutationObserver((records) => {
     } else if (r.type === 'attributes' && !OUR_ATTRS.has(r.attributeName)) {
       const t = r.target;
       // Inside our screens only controls matter (their look is what the knob shows).
-      if (insideOurs(t) && !t.matches?.('button, .card, input')) continue;
+      if (insideOurs(t) && (!t.matches?.('button, .card, input') || t.closest('.knob-sensor'))) continue;
       add(`атрибут ${r.attributeName} у ${label(t)} = ${String(t.getAttribute(r.attributeName)).slice(0, 60)}`);
     }
   }
