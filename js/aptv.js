@@ -3,7 +3,7 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=68b24f9-mvfywnv0';
+import { focusables, pickNext } from './nav.js?v=834cbf9-mvhuolbt';
 
 const root = document.documentElement;
 
