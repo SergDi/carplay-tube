@@ -3,7 +3,7 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=7c76a1a-mvhuw3vl';
+import { focusables, pickNext } from './nav.js?v=16084a1-mvhv2p2o';
 
 const root = document.documentElement;
 
@@ -26,13 +26,13 @@ export let iosDesktopMode = /Macintosh/.test(navigator.userAgent) && (navigator.
 // resize would undo it (and the car screen does not rotate).
 // Only the interface is zoomed (--ui-zoom in styles.css): zooming the page
 // would zoom the YouTube iframe too, and WebKit then shows a corner of the video.
-// APTV lays pages out 1280px wide (desktop mode) and shrinks them onto the car
-// screen; visualViewport.scale is that shrink, so innerWidth × scale is the real
-// width of the browser area. The interface is laid out at that width, so it looks
-// the same size on any car screen; Settings → «Размер интерфейса» nudges it.
+// The interface is laid out as if the browser area were LAYOUT.width ×
+// LAYOUT.height (about three cards across, the top bar and one and a half rows
+// down) and zoomed to fit the real area on both sides: car screens are wide
+// and low, so height usually decides. Settings → «Размер интерфейса» nudges it.
+const LAYOUT = { width: 760, height: 430 };
 const SIZE = { small: 1.2, normal: 1, large: 0.85 };
-const FALLBACK_WIDTH = 680; // when the browser does not report its shrink
-export const layoutInfo = { width: FALLBACK_WIDTH, measured: false };
+export const layoutInfo = { zoom: 1, width: 0, height: 0 };
 
 function fitWidth() {
   let size = 'normal';
@@ -41,12 +41,10 @@ function fitWidth() {
   } catch {
     // Storage blocked: default size.
   }
-  const scale = window.visualViewport?.scale ?? 1;
-  const real = scale < 0.95 ? innerWidth * scale : 0;
-  layoutInfo.measured = real >= 400 && real <= 1400;
-  const base = layoutInfo.measured ? real : FALLBACK_WIDTH;
-  layoutInfo.width = Math.round(base * (SIZE[size] ?? 1));
-  root.style.setProperty('--ui-zoom', innerWidth > layoutInfo.width ? String(innerWidth / layoutInfo.width) : '1');
+  const k = SIZE[size] ?? 1;
+  const zoom = Math.max(1, Math.min(innerWidth / (LAYOUT.width * k), innerHeight / (LAYOUT.height * k)));
+  Object.assign(layoutInfo, { zoom, width: innerWidth, height: innerHeight });
+  root.style.setProperty('--ui-zoom', String(zoom));
 }
 
 export function applyUiSize() {

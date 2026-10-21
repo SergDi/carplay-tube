@@ -1,9 +1,9 @@
-import { iosDesktopMode, applyUiSize, layoutInfo } from './aptv.js?v=7c76a1a-mvhuw3vl';
-import { api } from './api.js?v=7c76a1a-mvhuw3vl';
-import { store } from './store.js?v=7c76a1a-mvhuw3vl';
-import { DIRECTIONS, moveFocus } from './nav.js?v=7c76a1a-mvhuw3vl';
-import * as player from './player.js?v=7c76a1a-mvhuw3vl';
-import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=7c76a1a-mvhuw3vl';
+import { iosDesktopMode, applyUiSize, layoutInfo } from './aptv.js?v=16084a1-mvhv2p2o';
+import { api } from './api.js?v=16084a1-mvhv2p2o';
+import { store } from './store.js?v=16084a1-mvhv2p2o';
+import { DIRECTIONS, moveFocus } from './nav.js?v=16084a1-mvhv2p2o';
+import * as player from './player.js?v=16084a1-mvhv2p2o';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=16084a1-mvhv2p2o';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -553,7 +553,7 @@ function sizeSection() {
     el('h2', { textContent: 'Размер интерфейса' }),
     el('p', { textContent: 'Карточки, кнопки и надписи. Видео всегда на весь экран.' }),
     iosDesktopMode
-      ? el('p', { className: 'note', textContent: `Интерфейс под ширину ${layoutInfo.width} — ${layoutInfo.measured ? 'определено по экрану' : 'экран не сообщил размер, взято по умолчанию'}. Сжатие страницы ${(visualViewport?.scale ?? 1).toFixed(3)}.` })
+      ? el('p', { className: 'note', textContent: `Страница ${layoutInfo.width}×${layoutInfo.height}, увеличение ×${layoutInfo.zoom.toFixed(2)}, сжатие ${(visualViewport?.scale ?? 1).toFixed(2)}.` })
       : null,
     el('div', { className: 'actions' }, option('small', 'Мельче'), option('normal', 'Обычный'), option('large', 'Крупнее')),
   );
