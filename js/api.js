@@ -1,5 +1,5 @@
-import { API_BASE } from './config.js?v=16084a1-mvhv2p2o';
-import { store } from './store.js?v=16084a1-mvhv2p2o';
+import { API_BASE } from './config.js?v=901fcda-mvhv8383';
+import { store } from './store.js?v=901fcda-mvhv8383';
 
 async function call(path, { method = 'GET', body, params } = {}) {
   const url = new URL(`${API_BASE}${path}`);

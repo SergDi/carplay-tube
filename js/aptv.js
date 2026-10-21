@@ -3,7 +3,7 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=16084a1-mvhv2p2o';
+import { focusables, pickNext } from './nav.js?v=901fcda-mvhv8383';
 
 const root = document.documentElement;
 
@@ -42,7 +42,8 @@ function fitWidth() {
     // Storage blocked: default size.
   }
   const k = SIZE[size] ?? 1;
-  const zoom = Math.max(1, Math.min(innerWidth / (LAYOUT.width * k), innerHeight / (LAYOUT.height * k)));
+  // Shrinks as well as grows: in the car APTV's page can be as small as 455×212.
+  const zoom = Math.max(0.35, Math.min(innerWidth / (LAYOUT.width * k), innerHeight / (LAYOUT.height * k)));
   Object.assign(layoutInfo, { zoom, width: innerWidth, height: innerHeight });
   root.style.setProperty('--ui-zoom', String(zoom));
 }
