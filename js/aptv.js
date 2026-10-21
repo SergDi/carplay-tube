@@ -3,7 +3,7 @@
 // knob from injected script — it writes an inline red outline on the element it
 // selects and calls click() on it. No key or focus event reaches the page.
 
-import { focusables, pickNext } from './nav.js?v=901fcda-mvhv8383';
+import { focusables, pickNext } from './nav.js?v=4c6986a-mvhvleaq';
 
 const root = document.documentElement;
 
@@ -81,6 +81,8 @@ const APTV_RING = /rgb\(255,\s*64,\s*98\)/;
 // nothing lies in a direction its sensor is hidden, so the nudge leaves the
 // page (to the CarPlay dock, APTV's toolbar).
 const GAP = 34;
+// Set by app.js: whether a nudge past the last card can load more, and loading it.
+export const knob = { canExtend: () => false, extend: async () => {} };
 const sensors = [];
 const role = new Map();
 let center = null;
@@ -163,7 +165,7 @@ function layout() {
       role.set(s, dir);
       place(s, x, y, 24, 24);
       // Hidden controls of the player: any nudge just shows them.
-      const open = controlsHidden() || Boolean(neighbour(el, dir));
+      const open = controlsHidden() || Boolean(neighbour(el, dir)) || knob.canExtend(el, dir);
       if (open) s.removeAttribute('aria-hidden');
       else s.setAttribute('aria-hidden', 'true');
     });
@@ -177,7 +179,15 @@ function nudged(sensor) {
   if (controlsHidden()) {
     document.getElementById('p-shield').click();
   } else {
-    neighbour(selected(), dir)?.focus();
+    const from = selected();
+    const to = neighbour(from, dir);
+    if (to) to.focus();
+    else if (knob.canExtend(from, dir)) {
+      knob.extend(from, dir).then(() => {
+        if (document.activeElement === from) neighbour(from, dir)?.focus();
+        layout();
+      });
+    }
   }
   layout();
 }

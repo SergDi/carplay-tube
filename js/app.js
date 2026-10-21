@@ -1,9 +1,9 @@
-import { iosDesktopMode, applyUiSize, layoutInfo } from './aptv.js?v=901fcda-mvhv8383';
-import { api } from './api.js?v=901fcda-mvhv8383';
-import { store } from './store.js?v=901fcda-mvhv8383';
-import { DIRECTIONS, moveFocus } from './nav.js?v=901fcda-mvhv8383';
-import * as player from './player.js?v=901fcda-mvhv8383';
-import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=901fcda-mvhv8383';
+import { iosDesktopMode, applyUiSize, layoutInfo, knob } from './aptv.js?v=4c6986a-mvhvleaq';
+import { api } from './api.js?v=4c6986a-mvhvleaq';
+import { store } from './store.js?v=4c6986a-mvhvleaq';
+import { DIRECTIONS, moveFocus } from './nav.js?v=4c6986a-mvhvleaq';
+import * as player from './player.js?v=4c6986a-mvhvleaq';
+import { dedupe, mergeShelves, homeView, homeChips, subscriptionsView, MUSIC } from './feeds.js?v=4c6986a-mvhvleaq';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, ...children) => {
@@ -221,9 +221,26 @@ function loadingTail(on) {
 }
 
 // hint.shelf: the viewer reached the end of that shelf (a TV row or a picked home filter).
+// Whether loadMore(hint) would fetch anything.
+function hasMore(hint = {}) {
+  const f = feed;
+  if (!f) return false;
+  if (f.kind === 'search') return Boolean(f.next);
+  if (!shelfFeed()) return false;
+  const shelf = hint.shelf != null ? f.shelves.find((s) => s.title === hint.shelf) : null;
+  return Boolean(shelf?.next || f.next);
+}
+
+// Resolves when the cards are on screen; a call during a load waits for that load.
 async function loadMore(hint = {}, depth = 0) {
   const f = feed;
-  if (!f || f.loading || depth > 2) return;
+  if (!f || depth > 2) return;
+  if (f.loading) return f.pending;
+  f.pending = fetchMore(f, hint, depth);
+  return f.pending;
+}
+
+async function fetchMore(f, hint, depth) {
   let request;
   if (f.kind === 'search') {
     if (!f.next) return;
@@ -260,7 +277,10 @@ async function loadMore(hint = {}, depth = 0) {
   if (f !== feed) return;
   loadingTail(false);
   // A filter may find nothing new on a page; look one page further.
-  if (drawMore() === 0) loadMore(hint, depth + 1);
+  if (drawMore() === 0) {
+    f.loading = false;
+    await loadMore(hint, depth + 1);
+  }
 }
 
 function gridHint() {
@@ -281,9 +301,28 @@ function maybeMore(target) {
     if (rowsAll.indexOf(track.closest('.row')) >= rowsAll.length - 2) loadMore();
     return;
   }
-  const cards = [...(target.closest('.grid')?.children ?? [])];
-  if (cards.indexOf(target) >= cards.length - 6) loadMore(gridHint());
+  const grid = target.closest('.grid');
+  const cards = [...(grid?.children ?? [])];
+  // Start three rows before the end, so the next cards are there before the knob is.
+  const top = cards[0]?.offsetTop;
+  const cols = Math.max(1, cards.filter((c) => c.offsetTop === top).length);
+  if (cards.indexOf(target) >= cards.length - cols * 3) loadMore(gridHint());
 }
+
+// The knob reached the last card in a direction: if more can come that way,
+// APTV's sensor stays (js/aptv.js) and a nudge there loads them first.
+function moreHint(el, dir) {
+  if (!feed || !el?.classList?.contains('card') || !$('content').contains(el)) return null;
+  const track = el.closest('.row-track');
+  if (track) return dir === 'right' ? { shelf: track.dataset.shelf } : dir === 'down' ? {} : null;
+  return dir === 'down' ? gridHint() : null;
+}
+
+knob.canExtend = (el, dir) => {
+  const hint = moreHint(el, dir);
+  return Boolean(hint && hasMore(hint));
+};
+knob.extend = (el, dir) => loadMore(moreHint(el, dir) ?? {});
 
 $('main').addEventListener('scroll', () => {
   const m = $('main');
